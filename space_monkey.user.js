@@ -208,11 +208,10 @@
             content: ''; position: absolute; width: 0; height: 0; border-style: solid;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        /* Top-Left part (◤) - Shrinks on collapse */
         #gb-collapse-toggle::after {
             bottom: 0; right: 0;
             border-width: 8px 8px 0 0;
-            border-color: ${isConfigReady() ? '#22c55e' : '#f59e0b'} transparent transparent transparent;
+            border-color: #f59e0b transparent transparent transparent;
             transform-origin: bottom right;
             opacity: 0.8;
         }
@@ -220,7 +219,7 @@
         #gb-collapse-toggle::before {
             bottom: 0; right: 0;
             border-width: 0 0 8px 8px;
-            border-color: transparent transparent ${isConfigReady() ? '#22c55e' : '#f59e0b'} transparent;
+            border-color: transparent transparent #f59e0b transparent;
             transform-origin: bottom right;
             opacity: 0.8;
         }
@@ -412,7 +411,7 @@
                         </div>` : ''}
                     </div>
                 </div>
-                <div class="gb-telemetry">
+                <div class="gb-telemetry stats-collapsed">
                     <div id="gb-telemetry-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; cursor: help;" title="Awaiting first update...">
                         <div style="display: flex; align-items: center;">
                             <div class="gb-prefix">
