@@ -510,6 +510,26 @@ function generateDashboardHTML() {
         @keyframes push-up {
             0% { transform: translateY(0); }
             100% { transform: translateY(-50%); }
+        /* Stale State (Offline/Disconnected) */
+        .card.stale {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.4) !important;
+            background: rgba(25, 10, 10, 0.95) !important;
+        }
+        .card.stale::before {
+            background: #ef4444 !important;
+        }
+        .card.stale .char-name, 
+        .card.stale .stat-value:not(.rank), 
+        .card.stale .gb-label,
+        .card.stale .glitch-text {
+            color: #ef4444 !important;
+            text-shadow: 0 0 8px rgba(239, 68, 68, 0.3) !important;
+        }
+        .card.stale .pulse-dot {
+            background-color: #ef4444;
+            animation: none;
+            opacity: 0.5;
         }
 
     </style>
@@ -595,7 +615,10 @@ function generateDashboardHTML() {
                 }
 
                 const isPilotActive = stats.isPilotEnabled == 1;
-                card.className = 'card ' + (isPilotActive ? 'active' : 'inactive');
+                const ts = stats.timestamp;
+                const syncTime = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z').getTime();
+                const isStale = (Date.now() - syncTime) > 300000; // 5 mins
+                card.className = 'card ' + (isPilotActive ? 'active' : 'inactive') + (isStale ? ' stale' : '');
                 
                 const lastSeen = new Date(stats.timestamp).toLocaleString();
                 const [fCur, fTot] = (stats.fuel || "0/1").split('/').map(n => parseInt(n.replace(/,/g,'')));
@@ -755,9 +778,18 @@ function generateDashboardHTML() {
             const now = Date.now();
             Object.keys(window.latestTelemetry).forEach(name => {
                 const stats = window.latestTelemetry[name];
+                const ts = stats.timestamp;
+                const syncTime = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z').getTime();
+                
+                // Toggle Stale State
+                const isStale = (now - syncTime) > 300000; // 5 mins
+                const card = document.getElementById('card-' + name);
+                if (card) {
+                    if (isStale) card.classList.add('stale');
+                    else card.classList.remove('stale');
+                }
+
                 if (stats.isPilotEnabled == 1) {
-                    const ts = stats.timestamp;
-                    const syncTime = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z').getTime();
                     const elapsed = Math.floor((now - syncTime) / 1000);
                     const total = (stats.apUptime || 0) + Math.max(0, elapsed);
                     const el = document.getElementById('uptime-val-' + name);
