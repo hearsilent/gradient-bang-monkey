@@ -457,7 +457,7 @@ function generateDashboardHTML() {
                     <div class="char-name">
                         \${name}
                         <div class="gb-toggle-chip \${isPilotActive ? 'active' : ''}">
-                            <span class="chip-label">AUTO_PILOT</span>
+                            <span class="chip-label">AP</span>
                             <span class="chip-state">\${isPilotActive ? 'ON' : 'OFF'}</span>
                         </div>
                     </div>

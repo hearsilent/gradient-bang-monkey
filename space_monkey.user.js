@@ -95,7 +95,7 @@
         .gb-stat-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px; padding-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.05); }
         .gb-stat-row:last-child { border-bottom: none; }
         .gb-stat-label { color: #777; text-transform: uppercase; font-weight: bold; font-size: 9px; letter-spacing: 0.5px; display: flex; align-items: center; }
-        .gb-stat-label::before { content: '::'; margin-right: 6px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; opacity: 0.5; }
+        .gb-prefix-icon { color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; opacity: 0.5; }
         .gb-stat-value { color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-align: right; font-weight: 900; text-shadow: 0 0 10px rgba(34, 197, 94, 0.4); font-family: 'Consolas', monospace; }
 
         .btn-group { display: flex; gap: 8px; margin-top: 15px; }
@@ -114,18 +114,42 @@
             50% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 8px currentColor; }
             100% { transform: scale(1); opacity: 0.8; }
         }
+        @keyframes spin {
+            from { transform: scale(1.2) rotate(0deg); }
+            to { transform: scale(1.2) rotate(360deg); }
+        }
+
+        .gb-prefix {
+            width: 32px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            flex-shrink: 0;
+        }
         .gb-pulse-dot {
             display: inline-block;
-            width: 6px;
-            height: 6px;
+            width: 7px;
+            height: 7px;
             background-color: currentColor;
             border-radius: 50%;
-            margin-left: 8px;
-            vertical-align: middle;
             animation: breathe 3s infinite ease-in-out;
-            margin-top: -2px;
-            pointer-events: none;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.3s, border 0.3s;
+            position: relative;
+            box-sizing: border-box;
+            z-index: 10;
         }
+        .gb-pulse-dot.syncing {
+            animation: spin 0.6s linear infinite !important;
+            background: transparent !important;
+            border: 2px solid rgba(245, 158, 11, 0.15) !important;
+            border-top: 2px solid #f59e0b !important;
+            border-right: 2px solid #f59e0b !important;
+            box-shadow: none !important;
+        }
+        .gb-pulse-dot:hover:not(.syncing) { transform: scale(1.4); }
+        .gb-pulse-dot:active { transform: scale(0.9); opacity: 0.7; }
 
         .gb-toggle-chip {
             display: flex;
@@ -150,7 +174,10 @@
 
         #gb-stat-container { transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; overflow: visible; max-height: 800px; opacity: 1; margin-bottom: 5px; }
         .stats-collapsed #gb-stat-container { max-height: 0; opacity: 0; margin-top: 0; margin-bottom: 0; overflow: hidden; pointer-events: none; }
-        #gb-telemetry-header { cursor: pointer; user-select: none; padding-bottom: 5px; transition: padding 0.3s; }
+        #gb-telemetry-header { 
+            cursor: pointer; user-select: none; padding-bottom: 8px; transition: padding 0.3s;
+            display: flex; align-items: center;
+        }
         .stats-collapsed #gb-telemetry-header { padding-bottom: 0; }
         
         #gb-collapse-toggle { 
@@ -200,21 +227,23 @@
                 <div class="gb-telemetry">
                     <div id="gb-telemetry-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; cursor: help;" title="Awaiting first update...">
                         <div style="display: flex; align-items: center;">
-                            <span id="gb-status-dot" class="gb-pulse-dot" style="margin-left: 0; margin-right: 10px; color:${isConfigReady() ? '#22c55e' : '#f59e0b'};"></span>
+                            <div class="gb-prefix">
+                                <div id="gb-status-dot" class="gb-pulse-dot" title="FORCE_SYNC_TELEMETRY"></div>
+                            </div>
                             <span class="gb-label" style="margin:0; color:${isConfigReady() ? '#22c55e' : '#f59e0b'}; font-size: 10px; letter-spacing: 1.5px;">SYSTEM_SENSORS</span>
                         </div>
                         <div id="pilot-toggle-btn" class="gb-toggle-chip ${CONFIG.isPilotEnabled ? 'active' : ''}">
-                            <span class="chip-label">AUTO_PILOT</span>
+                            <span class="chip-label">AP</span>
                             <span class="chip-state">${CONFIG.isPilotEnabled ? 'ON' : 'OFF'}</span>
                         </div>
                     </div>
                     <div id="gb-stat-container">
-                        <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_BANK</span><span id="val-bank" class="gb-stat-value">0</span></div>
-                        <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_HAND</span><span id="val-hand" class="gb-stat-value">0</span></div>
-                        <div class="gb-stat-row"><span class="gb-stat-label">LOC_SECTOR</span><span id="val-sector" class="gb-stat-value">UNKNOWN</span></div>
-                        <div class="gb-stat-row"><span class="gb-stat-label">MEGA_PROXIMITY</span><span id="val-mega" class="gb-stat-value">INF</span></div>
-                        <div class="gb-stat-row"><span class="gb-stat-label">FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
-                        <div class="gb-stat-row"><span class="gb-stat-label">RANK [ W / T / E ]</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>CREDITS_BANK</span><span id="val-bank" class="gb-stat-value">0</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>CREDITS_HAND</span><span id="val-hand" class="gb-stat-value">0</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>LOC_SECTOR</span><span id="val-sector" class="gb-stat-value">UNKNOWN</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>MEGA_PROXIMITY</span><span id="val-mega" class="gb-stat-value">INF</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>RANK [ W / T / E ]</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
                     </div>
                     <div id="gb-collapse-toggle"></div>
                 </div>
@@ -336,6 +365,27 @@
 
         if (header) header.onclick = toggleExpanded;
         if (toggleBtn) toggleBtn.onclick = toggleExpanded;
+        
+        const statusDot = panel.querySelector('#gb-status-dot');
+        if (statusDot) {
+            statusDot.onclick = async (e) => {
+                e.stopPropagation();
+                if (statusDot.classList.contains('syncing')) return;
+                
+                log('Manual telemetry sync triggered.');
+                statusDot.classList.add('syncing');
+                statusDot.title = 'SYNCING_DATA...';
+                
+                try {
+                    await reportToWebhook();
+                } finally {
+                    setTimeout(() => {
+                        statusDot.classList.remove('syncing');
+                        statusDot.title = 'FORCE_SYNC_TELEMETRY';
+                    }, 500);
+                }
+            };
+        }
 
         if (scrollArea && telemetryBlock) {
             scrollArea.addEventListener('scroll', () => {
