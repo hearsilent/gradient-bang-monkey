@@ -178,7 +178,14 @@
                 document.getElementById('clear-logs').innerText = `WIPE ALL RECORDS (${getLogCount()})`;
             }
         };
-        document.getElementById('clear-logs').onclick = () => { if (confirm('Purge all logs?')) { localStorage.removeItem('gb_history'); localStorage.removeItem('gb_leaderboard_history'); location.reload(); }};
+        document.getElementById('clear-logs').onclick = () => { 
+            if (confirm('Purge all logs?')) { 
+                localStorage.removeItem('gb_history'); 
+                localStorage.removeItem('gb_leaderboard_history'); 
+                document.getElementById('clear-logs').innerText = `WIPE ALL RECORDS (0)`;
+                log('System logs purged successfully.');
+            }
+        };
         document.getElementById('gb-save-btn').onclick = () => {
             saveConfig({
                 email: document.getElementById('cfg-email').value,
