@@ -317,7 +317,9 @@
         window.downloadLogs = (format) => {
             const h = JSON.parse(localStorage.getItem('gb_history') || '[]');
             const l = JSON.parse(localStorage.getItem('gb_leaderboard_history') || '[]');
-            const content = format === 'json' ? JSON.stringify({stats:h, leaderboard:l}, null, 2) : "Timestamp,Bank,OnHand,Fuel,Rank_W,Rank_T,Rank_E\n" + h.map(x=>`"${x.t}",${x.b},${x.h},"${x.f}","${x.rw||'N/A'}","${x.rt||'N/A'}","${x.re||'N/A'}"`).join("\n");
+            const content = format === 'json' ? JSON.stringify({stats:h, leaderboard:l}, null, 2) : 
+                "Timestamp,Bank,OnHand,Fuel,Sector,TargetMega,Proximity,Rank_W,Rank_T,Rank_E\n" + 
+                h.map(x=>`"${x.t}",${x.b},${x.h},"${x.f}",${x.s||'N/A'},${x.nm||'N/A'},${x.dm||'N/A'},"${x.rw||'N/A'}","${x.rt||'N/A'}","${x.re||'N/A'}"`).join("\n");
             const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type: format==='json'?'application/json':'text/csv' })); a.download = `gb_report.${format}`; a.click();
         };
 
@@ -504,7 +506,12 @@
                 updateMegaPortDistance(currentSector);
                 const mEl = document.getElementById('val-mega'); 
                 if (mEl && window.lastKnownDistToMega !== undefined) {
-                    mEl.innerText = `${window.lastKnownDistToMega} HOPS`;
+                    const idSuffix = window.lastNearestMegaId !== undefined ? ` (${window.lastNearestMegaId})` : '';
+                    const dist = window.lastKnownDistToMega;
+                    const col = dist <= 5 ? '#22c55e' : (dist <= 12 ? '#f59e0b' : '#ff4444');
+                    mEl.innerText = `${dist} HOPS${idSuffix}`;
+                    mEl.style.color = col;
+                    mEl.style.textShadow = `0 0 8px ${col}44`;
                 }
             }
 
@@ -553,6 +560,9 @@
                 b: stats.bank, 
                 h: stats.onHand, 
                 f: stats.fuel,
+                s: stats.currentSector,
+                nm: window.lastNearestMegaId,
+                dm: window.lastKnownDistToMega,
                 rw: ranks.w,
                 rt: ranks.t,
                 re: ranks.e
@@ -574,19 +584,25 @@
             }
 
             let minDist = 999;
+            let nearestId = null;
             for (const megaId of window.megaPortsMap) {
-                if (megaId === sectorId) {
-                    minDist = 0;
-                    break;
+                const d = (megaId === sectorId) ? 0 : Math.abs(megaId - sectorId) % 20;
+                if (d < minDist) {
+                    minDist = d;
+                    nearestId = megaId;
                 }
-                const d = Math.abs(megaId - sectorId) % 20;
-                if (d < minDist) minDist = d;
             }
             
             window.lastKnownDistToMega = minDist;
+            window.lastNearestMegaId = nearestId;
             // Update UI immediately
             const mEl = document.getElementById('val-mega'); 
-            if (mEl) mEl.innerText = `${minDist} HOPS`;
+            if (mEl) {
+                const col = minDist <= 5 ? '#22c55e' : (minDist <= 12 ? '#f59e0b' : '#ff4444');
+                mEl.innerText = `${minDist} HOPS (${nearestId})`;
+                mEl.style.color = col;
+                mEl.style.textShadow = `0 0 8px ${col}44`;
+            }
         } finally {
             window.isUpdatingMegaDist = false;
         }
@@ -600,7 +616,16 @@
             if (!data) return;
             
             let distToMega = (window.lastKnownDistToMega !== undefined) ? window.lastKnownDistToMega : null;
-            const mEl = document.getElementById('val-mega'); if (mEl) mEl.innerText = distToMega !== null ? `${distToMega} HOPS` : 'SEARCHING...';
+            const mEl = document.getElementById('val-mega'); 
+            if (mEl) {
+                const idSuffix = window.lastNearestMegaId !== undefined ? ` (${window.lastNearestMegaId})` : '';
+                const col = distToMega <= 5 ? '#22c55e' : (distToMega <= 12 ? '#f59e0b' : '#ff4444');
+                mEl.innerText = distToMega !== null ? `${distToMega} HOPS${idSuffix}` : 'SEARCHING...';
+                if (distToMega !== null) {
+                    mEl.style.color = col;
+                    mEl.style.textShadow = `0 0 8px ${col}44`;
+                }
+            }
 
             let rankWealth = "N/A", rankTrading = "N/A", rankExploration = "N/A", totalWealth = "0";
 
@@ -633,6 +658,7 @@
                 fuel: data.fuel,
                 currentSector: data.currentSector,
                 distToMega,
+                nearestMegaId: window.lastNearestMegaId,
                 rankWealth,
                 rankTrading,
                 rankExploration,

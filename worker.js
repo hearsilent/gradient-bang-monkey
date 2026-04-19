@@ -44,6 +44,7 @@ export default {
     await migrate("ALTER TABLE telemetry ADD COLUMN totalWealth TEXT");
     await migrate("ALTER TABLE telemetry ADD COLUMN currentSector INTEGER");
     await migrate("ALTER TABLE telemetry ADD COLUMN distToMega INTEGER");
+    await migrate("ALTER TABLE telemetry ADD COLUMN nearestMegaId INTEGER");
     await migrate("ALTER TABLE telemetry ADD COLUMN isPilotEnabled INTEGER DEFAULT 0");
 
     // GET: Retrieve telemetry
@@ -82,6 +83,7 @@ export default {
             totalWealth: row.totalWealth,
             currentSector: row.currentSector,
             distToMega: row.distToMega,
+            nearestMegaId: row.nearestMegaId,
             isPilotEnabled: row.isPilotEnabled,
             timestamp: row.timestamp
           };
@@ -94,14 +96,19 @@ export default {
 
       // Return history for specific character
       const { results } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, isPilotEnabled, timestamp 
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled, timestamp 
+        FROM telemetry 
+    `).all(); // Note: simplified for brevity, following existing pattern in the file if needed.
+    // Actually, following lines 96-102:
+    const { results: historyResults } = await env.gb_banana.prepare(`
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled, timestamp 
         FROM telemetry 
         WHERE charName = ? 
         ORDER BY timestamp DESC 
         LIMIT 50
       `).bind(charName).all();
 
-      return new Response(JSON.stringify(results), {
+      return new Response(JSON.stringify(historyResults), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -110,15 +117,15 @@ export default {
     if (request.method === "POST") {
       try {
         const data = await request.json();
-        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, isPilotEnabled, timestamp } = data;
+        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled, timestamp } = data;
 
         if (!charName) throw new Error("Missing charName");
 
         // Insert new record
         await env.gb_banana.prepare(`
-          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, isPilotEnabled, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, isPilotEnabled || 0, timestamp || new Date().toISOString()).run();
+          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled || 0, timestamp || new Date().toISOString()).run();
           
         return new Response("OK", { headers: corsHeaders });
       } catch (err) {
@@ -468,7 +475,9 @@ function generateDashboardHTML() {
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">MEGA_PORT_PROXIMITY</span>
-                        <span class="stat-value">\${stats.distToMega !== null ? stats.distToMega + ' HOPS' : 'INF' }</span>
+                        <span class="stat-value" style="color: \${stats.distToMega !== null ? (stats.distToMega <= 5 ? '#22c55e' : (stats.distToMega <= 12 ? '#f59e0b' : '#ff4444')) : '#22c55e'};">
+                            \${stats.distToMega !== null ? stats.distToMega + ' HOPS' + (stats.nearestMegaId !== undefined ? ' (' + stats.nearestMegaId + ')' : '') : 'INF' }
+                        </span>
                     </div>
                     <div class="stat-row" style="border-bottom: none;">
                         <span class="stat-label">FUEL_CAPACITY</span>
