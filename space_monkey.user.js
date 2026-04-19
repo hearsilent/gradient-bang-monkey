@@ -17,7 +17,7 @@
         email: 'your_email',
         pass: 'your_password',
         charName: 'your_character_name',
-        pilotCommand: "your_pilot_command",
+        pilotProtocol: "your_pilot_protocol",
         idleInterval: 120000,
         refreshInterval: 1800000,
         loginGraceMs: 30000,
@@ -38,7 +38,7 @@
             CONFIG.email && CONFIG.email !== 'your_email' &&
             CONFIG.pass && CONFIG.pass !== 'your_password' &&
             CONFIG.charName && CONFIG.charName !== 'your_character_name' &&
-            CONFIG.pilotCommand && CONFIG.pilotCommand !== 'your_pilot_command'
+            CONFIG.pilotProtocol && CONFIG.pilotProtocol !== 'your_pilot_protocol'
         );
     }
 
@@ -69,7 +69,7 @@
     const styles = `
         #gb-tactical-panel { position: fixed; left: 0; top: 48px; z-index: 99999; display: flex; align-items: flex-start; font-family: 'Consolas', 'Roboto Mono', monospace; transition: transform 0.4s; }
         #gb-tactical-panel.collapsed { transform: translateX(-320px); }
-        #gb-content { width: 320px; background: rgba(8,8,8,0.98); border: 1px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; border-left: none; color: #eee; padding: 20px; backdrop-filter: blur(12px); box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
+        #gb-content { width: 320px; max-height: calc(100vh - 60px); display: flex; flex-direction: column; background: rgba(8,8,8,0.98); border: 1px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; border-left: none; color: #eee; padding: 20px; backdrop-filter: blur(12px); box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
         #gb-toggle { background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; color: #000; padding: 24px 8px; cursor: pointer; writing-mode: vertical-lr; text-transform: uppercase; font-size: 10px; font-weight: 900; letter-spacing: 1px; border-radius: 0 4px 4px 0; transition: background 0.3s; }
         
         #gb-tactical-panel.gb-off #gb-toggle { background: #666 !important; }
@@ -106,7 +106,7 @@
         .gb-btn-danger { background: transparent; color: #ff4444; border: 1px solid #441111; margin-top: 15px; }
         .gb-btn-danger:hover { background: #441111; }
 
-        .gb-scroll-area { max-height: 350px; overflow-y: auto; padding-right: 0; margin-bottom: 20px; scrollbar-width: none; -ms-overflow-style: none; }
+        .gb-scroll-area { flex: 1; overflow-y: auto; padding-right: 5px; margin-bottom: 20px; scrollbar-width: none; -ms-overflow-style: none; }
         .gb-scroll-area::-webkit-scrollbar { display: none; }
 
         @keyframes breathe {
@@ -185,8 +185,8 @@
                     <span class="gb-label">Pilot Name</span>
                     <input type="text" id="cfg-char" class="gb-input" placeholder="HearSilent" value="${CONFIG.charName}">
                     
-                    <span class="gb-label">Pilot Command</span>
-                    <textarea id="cfg-cmd" class="gb-input" style="height: 80px; resize: none;">${CONFIG.pilotCommand}</textarea>
+                    <span class="gb-label">Pilot Protocol</span>
+                    <textarea id="cfg-cmd" class="gb-input" style="height: 80px; resize: none;">${CONFIG.pilotProtocol}</textarea>
                     
                     <div class="btn-group" style="margin-top: 5px;">
                         <div style="flex: 1;">
@@ -238,13 +238,13 @@
         document.getElementById('pilot-toggle-btn').onclick = (e) => {
             e.stopPropagation();
             const cmd = document.getElementById('cfg-cmd').value;
-            if (!cmd || cmd === 'your_pilot_command') {
+            if (!cmd || cmd === 'your_pilot_protocol') {
                 const cmdInput = document.getElementById('cfg-cmd');
                 cmdInput.focus();
                 cmdInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 cmdInput.style.borderColor = '#ff4444';
                 setTimeout(() => { cmdInput.style.borderColor = ''; }, 2000);
-                log('PILOT_COMMAND not set. Please configure before enabling.');
+                log('PILOT_PROTOCOL not set. Please configure before enabling.');
                 return;
             }
             const newState = !CONFIG.isPilotEnabled;
@@ -255,13 +255,14 @@
             chip.classList.toggle('active', newState);
             chip.querySelector('.chip-state').innerText = newState ? 'ON' : 'OFF';
             log(`Auto-pilot ${newState ? 'enabled' : 'disabled'}.`);
+            reportToWebhook();
         };
         document.getElementById('gb-save-btn').onclick = () => {
             saveConfig({
                 email: document.getElementById('cfg-email').value,
                 pass: document.getElementById('cfg-pass').value,
                 charName: document.getElementById('cfg-char').value,
-                pilotCommand: document.getElementById('cfg-cmd').value,
+                pilotProtocol: document.getElementById('cfg-cmd').value,
                 idleInterval: parseInt(document.getElementById('cfg-idle').value) * 1000,
                 refreshInterval: parseInt(document.getElementById('cfg-refresh').value) * 60000,
                 loginGraceMs: parseInt(document.getElementById('cfg-grace').value) * 1000,
@@ -361,8 +362,8 @@
         if (!CONFIG.isPilotEnabled) return isWorking;
 
         if (isIdle && !window.pilotStarted) {
-            log('STATUS: Idle / Inactive detected. Dispatching command...');
-            syncValue(chatInput, CONFIG.pilotCommand);
+            log('STATUS: Idle / Inactive detected. Dispatching protocol...');
+            syncValue(chatInput, CONFIG.pilotProtocol);
             setTimeout(() => {
                 const btn = document.querySelector('input[placeholder="Enter command"]').closest('div').querySelector('button');
                 if (btn) btn.click();
@@ -400,7 +401,19 @@
             
             const bEl = document.getElementById('val-bank'); if (bEl) bEl.innerText = bank;
             const hEl = document.getElementById('val-hand'); if (hEl) hEl.innerText = onHand;
-            const fEl = document.getElementById('val-fuel'); if (fEl) fEl.innerText = fuel;
+            const fEl = document.getElementById('val-fuel'); 
+            if (fEl) {
+                fEl.innerText = fuel;
+                const [fCur, fTot] = fuel.split('/').map(n => parseInt(n.replace(/,/g,'')));
+                if (!isNaN(fCur) && !isNaN(fTot)) {
+                    const fPct = (fCur / fTot) * 100;
+                    fEl.style.color = fPct < 30 ? '#ff4444' : (fPct < 70 ? '#f59e0b' : '#22c55e');
+                    fEl.style.textShadow = `0 0 8px \${fEl.style.color}44`;
+                } else {
+                    fEl.style.color = '';
+                    fEl.style.textShadow = '';
+                }
+            }
 
             const dotEl = document.getElementById('gb-status-dot');
             const headerEl = document.getElementById('gb-telemetry-header');
@@ -487,6 +500,7 @@
 
             const payload = {
                 charName: CONFIG.charName,
+                isPilotEnabled: CONFIG.isPilotEnabled ? 1 : 0,
                 bank: stats.bank,
                 onHand: stats.onHand,
                 fuel: stats.fuel,

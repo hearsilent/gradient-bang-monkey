@@ -27,19 +27,20 @@ export default {
         rankTrading TEXT,
         rankExploration TEXT,
         totalWealth TEXT,
+        isPilotEnabled INTEGER DEFAULT 0,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `).run();
 
     // Migration: Add columns if they don't exist
-    try {
-      await env.gb_banana.prepare("ALTER TABLE telemetry ADD COLUMN rankWealth TEXT").run();
-      await env.gb_banana.prepare("ALTER TABLE telemetry ADD COLUMN rankTrading TEXT").run();
-      await env.gb_banana.prepare("ALTER TABLE telemetry ADD COLUMN rankExploration TEXT").run();
-      await env.gb_banana.prepare("ALTER TABLE telemetry ADD COLUMN totalWealth TEXT").run();
-    } catch (e) {
-      // Columns likely already exist
-    }
+    const migrate = async (sql) => {
+      try { await env.gb_banana.prepare(sql).run(); } catch(e) {}
+    };
+    await migrate("ALTER TABLE telemetry ADD COLUMN rankWealth TEXT");
+    await migrate("ALTER TABLE telemetry ADD COLUMN rankTrading TEXT");
+    await migrate("ALTER TABLE telemetry ADD COLUMN rankExploration TEXT");
+    await migrate("ALTER TABLE telemetry ADD COLUMN totalWealth TEXT");
+    await migrate("ALTER TABLE telemetry ADD COLUMN isPilotEnabled INTEGER DEFAULT 0");
 
     // GET: Retrieve telemetry
     if (request.method === "GET") {
@@ -75,6 +76,7 @@ export default {
             rankTrading: row.rankTrading,
             rankExploration: row.rankExploration,
             totalWealth: row.totalWealth,
+            isPilotEnabled: row.isPilotEnabled,
             timestamp: row.timestamp
           };
         });
@@ -86,7 +88,7 @@ export default {
 
       // Return history for specific character
       const { results } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, timestamp 
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, isPilotEnabled, timestamp 
         FROM telemetry 
         WHERE charName = ? 
         ORDER BY timestamp DESC 
@@ -102,15 +104,15 @@ export default {
     if (request.method === "POST") {
       try {
         const data = await request.json();
-        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, timestamp } = data;
+        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, isPilotEnabled, timestamp } = data;
 
         if (!charName) throw new Error("Missing charName");
 
         // Insert new record
         await env.gb_banana.prepare(`
-          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, timestamp || new Date().toISOString()).run();
+          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, isPilotEnabled, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, isPilotEnabled || 0, timestamp || new Date().toISOString()).run();
           
         return new Response("OK", { headers: corsHeaders });
       } catch (err) {
@@ -134,19 +136,52 @@ function generateDashboardHTML() {
             margin: 0;
             padding: 20px;
             background: #050505;
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(34, 197, 94, 0.05) 0%, transparent 80%),
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 100%, 100% 4px, 100% 100%;
             color: #eee;
             font-family: 'Consolas', 'Roboto Mono', monospace;
             display: flex;
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
+            overflow-x: hidden;
         }
+        body::after {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15), rgba(0,0,0,0.15) 1px, transparent 1px, transparent 2px);
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .scanner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 20px;
+            background: linear-gradient(180deg, transparent, rgba(34, 197, 94, 0.1), transparent);
+            animation: scan 8s linear infinite;
+            pointer-events: none;
+            z-index: 1001;
+        }
+        @keyframes scan {
+            0% { transform: translateY(-100px); }
+            100% { transform: translateY(100vh); }
+        }
+
         .container {
             width: 100%;
             max-width: 1000px;
         }
         .header {
-            border-bottom: 2px solid #22c55e;
+            position: relative;
             margin-bottom: 30px;
             padding-bottom: 10px;
             display: flex;
@@ -166,11 +201,20 @@ function generateDashboardHTML() {
         }
         .card {
             background: rgba(8, 8, 8, 0.95);
-            border: 1px solid #22c55e;
+            border: 1px solid #444;
             padding: 20px;
             position: relative;
             backdrop-filter: blur(10px);
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: all 0.4s ease;
+        }
+        .card.active {
+            border-color: #22c55e;
+            box-shadow: 0 0 25px rgba(34, 197, 94, 0.4);
+            background: rgba(10, 25, 15, 0.95);
+        }
+        .card.inactive {
+            opacity: 0.8;
         }
         .card::before {
             content: '';
@@ -179,8 +223,12 @@ function generateDashboardHTML() {
             left: 0;
             width: 4px;
             height: 100%;
-            background: #22c55e;
+            background: #444;
             opacity: 0.8;
+            transition: background 0.4s;
+        }
+        .card.active::before {
+            background: #22c55e;
         }
         .char-name {
             font-size: 16px;
@@ -224,6 +272,37 @@ function generateDashboardHTML() {
             color: #f59e0b;
             text-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
         }
+        .fuel-container {
+            width: 100%;
+            height: 4px;
+            background: #111;
+            margin-top: 4px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .fuel-bar {
+            height: 100%;
+            transition: width 0.5s ease, background 0.5s ease;
+        }
+        .gb-toggle-chip {
+            display: flex;
+            align-items: center;
+            background: rgba(20,20,20,0.8);
+            border: 1px solid #333;
+            padding: 2px;
+            border-radius: 4px;
+            font-size: 8px;
+            user-select: none;
+            margin-left: auto;
+        }
+        .gb-toggle-chip .chip-label { color: #666; padding: 0 8px; font-weight: 800; letter-spacing: 0.5px; }
+        .gb-toggle-chip .chip-state { background: #222; color: #555; padding: 3px 8px; border-radius: 2px; font-weight: 900; }
+        
+        .gb-toggle-chip.active { border-color: #22c55e; box-shadow: 0 0 15px rgba(34, 197, 94, 0.15); }
+        .gb-toggle-chip.active .chip-label { color: #22c55e; text-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+        .gb-toggle-chip.active .chip-state { background: #22c55e; color: #000; box-shadow: 0 0 10px rgba(34, 197, 94, 0.3); }
+
+
         .rank-grid {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -262,27 +341,62 @@ function generateDashboardHTML() {
         }
         .pulse-dot {
             display: inline-block;
-            width: 8px;
-            height: 8px;
+            width: 5px;
+            height: 5px;
             background-color: #22c55e;
             border-radius: 50%;
             animation: breathe 3s infinite ease-in-out;
-            vertical-align: middle;
+            margin-left: 6px;
         }
         #loading {
             color: #22c55e;
             margin-top: 50px;
             letter-spacing: 2px;
         }
+        .timer-text {
+            font-size: 10px; 
+            color: #888;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 5px 10px;
+            border: 1px solid transparent;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+        }
+        .timer-text:hover {
+            color: #22c55e;
+            background: rgba(34, 197, 94, 0.05);
+            border-color: rgba(34, 197, 94, 0.2);
+        }
+        #countdown {
+            color: #22c55e;
+            display: inline-block;
+            min-width: 20px;
+            text-align: center;
+        }
+        .header-line {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 2px;
+            background: #22c55e;
+            width: 100%;
+            transition: width 1s linear;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+        }
+
     </style>
 </head>
 <body>
+    <div class="scanner"></div>
     <div class="container">
         <div class="header">
             <h1>>> SYSTEM_MONITOR :: 0xCD1BA</h1>
-            <div style="font-size: 10px; color: #888;">
-                AUTO_REFRESH: 30S <span class="pulse-dot"></span>
+            <div class="timer-text" id="refresh-trigger" title="Click to Force Sync">
+                NEXT_SYNC: <span id="countdown">30</span>S <span class="pulse-dot"></span>
             </div>
+            <div class="header-line" id="progress-fill"></div>
         </div>
         <div id="grid" class="grid"></div>
         <div id="loading">INITIALIZING SENSORS...</div>
@@ -317,14 +431,22 @@ function generateDashboardHTML() {
             sortedChars.forEach(name => {
                 const stats = data[name];
                 const card = document.createElement('div');
-                card.className = 'card';
+                const isPilotActive = stats.isPilotEnabled == 1;
+                card.className = 'card ' + (isPilotActive ? 'active' : 'inactive');
                 
                 const lastSeen = new Date(stats.timestamp).toLocaleString();
                 
+                const [fCur, fTot] = (stats.fuel || "0/1").split('/').map(n => parseInt(n.replace(/,/g,'')));
+                const fPct = Math.min(100, Math.max(0, (fCur / fTot) * 100));
+                const fCol = fPct < 30 ? '#ff4444' : (fPct < 70 ? '#f59e0b' : '#22c55e');
+
                 card.innerHTML = \`
                     <div class="char-name">
                         \${name}
-                        <span style="font-size: 8px; opacity: 0.5;">ONLINE</span>
+                        <div class="gb-toggle-chip \${isPilotActive ? 'active' : ''}">
+                            <span class="chip-label">AUTO_PILOT</span>
+                            <span class="chip-state">\${isPilotActive ? 'ON' : 'OFF'}</span>
+                        </div>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">CREDITS_BANK</span>
@@ -334,11 +456,14 @@ function generateDashboardHTML() {
                         <span class="stat-label">CREDITS_HAND</span>
                         <span class="stat-value">\${stats.onHand}</span>
                     </div>
-                    <div class="stat-row">
+                    <div class="stat-row" style="border-bottom: none;">
                         <span class="stat-label">FUEL_CAPACITY</span>
-                        <span class="stat-value">\${stats.fuel}</span>
+                        <span class="stat-value" style="color: \${fCol};">\${stats.fuel}</span>
                     </div>
-                    <div class="stat-row">
+                    <div class="fuel-container">
+                        <div class="fuel-bar" style="width: \${fPct}%; background: \${fCol};"></div>
+                    </div>
+                    <div class="stat-row" style="margin-top: 15px;">
                         <span class="stat-label">TOTAL_WEALTH</span>
                         <span class="stat-value" style="color:#22c55e">\${stats.totalWealth || '0'}</span>
                     </div>
@@ -362,8 +487,34 @@ function generateDashboardHTML() {
             });
         }
 
+        let timeLeft = 30;
+        const countdownEl = document.getElementById('countdown');
+        const progressEl = document.getElementById('progress-fill');
+
+        function updateTicker() {
+            timeLeft--;
+            if (timeLeft < 0) {
+                forceRefresh();
+            } else {
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            countdownEl.innerText = timeLeft;
+            progressEl.style.width = (timeLeft / 30 * 100) + '%';
+        }
+
+        function forceRefresh() {
+            timeLeft = 30;
+            updateUI();
+            fetchData();
+        }
+
+        document.getElementById('refresh-trigger').onclick = forceRefresh;
+
         fetchData();
-        setInterval(fetchData, 30000);
+        setInterval(updateTicker, 1000);
     </script>
 </body>
 </html>`;
