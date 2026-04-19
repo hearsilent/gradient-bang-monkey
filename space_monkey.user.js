@@ -403,7 +403,14 @@
         panel.innerHTML = `
             <div id="gb-content">
                 <div class="gb-header">
-                    <h2>${isConfigReady() ? '>> SYSTEM READY :: 0xCD1BA' : '>> SETUP REQUIRED'}</h2>
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <h2 style="margin: 0;">${isConfigReady() ? '>> SYSTEM READY ::' : '>> SETUP REQUIRED'}</h2>
+                        ${isConfigReady() ? `
+                        <div style="display: flex; align-items: center; gap: 10px; margin-top: -2px;">
+                            <h2 style="margin: 0;">0xCD1BA</h2>
+                            <span id="gb-live-status" style="font-size: 8px; font-weight: 950; letter-spacing: 1px; padding: 2px 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 2px; cursor: help; height: 14px; line-height: 14px; display: inline-flex; align-items: center; text-transform: uppercase;" title="Awaiting monitoring cycle...">INIT</span>
+                        </div>` : ''}
+                    </div>
                 </div>
                 <div class="gb-telemetry">
                     <div id="gb-telemetry-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; cursor: help;" title="Awaiting first update...">
@@ -545,7 +552,10 @@
             // Immediate Action
             if (newState) {
                 localStorage.setItem('gb_ap_start_time', Date.now().toString());
-                triggerPilotProtocol();
+                const stats = refreshLiveData();
+                if (!runSafetyCheck(stats)) {
+                    triggerPilotProtocol();
+                }
             } else {
                 localStorage.removeItem('gb_ap_start_time');
                 if (window.pilotTimeout) {
@@ -562,7 +572,7 @@
             chip.classList.toggle('active', newState);
             chip.querySelector('.chip-state').innerText = newState ? 'ON' : 'OFF';
             log(`Auto-pilot ${newState ? 'enabled' : 'disabled'}.`);
-            reportToWebhook();
+            triggerHighFrequencySync(); // Quick updates to catch state change
         };
         document.getElementById('cfg-skip-working').onclick = (e) => {
             const chip = e.currentTarget;
@@ -819,8 +829,21 @@
             if (btn) {
                 btn.click();
                 log(`DISPATCH: ${cmd}`);
+                
+                // High-frequency sync to catch the state change (Working/Idle transformation)
+                triggerHighFrequencySync();
             }
         }, 600);
+    }
+
+    function triggerHighFrequencySync() {
+        log('Starting high-frequency telemetry sync...');
+        let count = 0;
+        const interval = setInterval(() => {
+            reportToWebhook();
+            count++;
+            if (count >= 5) clearInterval(interval); // Poll for ~5 seconds
+        }, 1000);
     }
 
     function syncValue(el, val) {
@@ -835,6 +858,21 @@
         el.blur();
     }
     
+    function runSafetyCheck(stats) {
+        if (stats && stats.fuelPct !== undefined && stats.fuelPct < (CONFIG.fuelThreshold || 0)) {
+            if (!window.safetyTriggered) {
+                log(`CRITICAL_SENSE: Fuel at ${stats.fuelPct.toFixed(1)}%. Initiating Safety Protocol...`);
+                dispatchCommand(CONFIG.safetyProtocol);
+                window.safetyTriggered = true;
+            }
+            return true; // Safety triggered
+        }
+        if (stats && stats.fuelPct > (CONFIG.fuelThreshold || 0) + 5) {
+            window.safetyTriggered = false; // Reset safety
+        }
+        return false;
+    }
+
     function triggerPilotProtocol() {
         if (!CONFIG.isPilotEnabled) return;
         const cmd = CONFIG.pilotProtocol;
@@ -901,29 +939,16 @@
         window.charSelected = false;
         if (window.loginGraceTimer && Date.now() < window.loginGraceTimer) return false;
 
-        // --- SAFETY MECHANISM (Highest Priority) ---
         const stats = refreshLiveData();
-        if (stats && stats.fuelPct !== undefined && stats.fuelPct < (CONFIG.fuelThreshold || 0)) {
-            if (!window.safetyTriggered) {
-                log(`CRITICAL_SENSE: Fuel at ${stats.fuelPct.toFixed(1)}%. Initiating Safety Protocol...`);
-                dispatchCommand(CONFIG.safetyProtocol);
-                window.safetyTriggered = true;
-            }
+        if (!stats) return false;
+
+        // --- SAFETY MECHANISM (Highest Priority) ---
+        if (runSafetyCheck(stats)) {
             return true; // Occupied by safety
-        }
-        if (stats && stats.fuelPct > (CONFIG.fuelThreshold || 0) + 5) {
-            window.safetyTriggered = false; // Reset safety when fuel is safe
         }
         // -------------------------------------------
 
-        const statusBadgeEl = [...document.querySelectorAll('div, span')].find(el => {
-            const p = getPropsFromFiber(el, ['border', 'variant']);
-            return p?.border === 'bracket';
-        });
-
-        const badgeProps = statusBadgeEl ? getPropsFromFiber(statusBadgeEl, ['variant']) : null;
-
-        const isWorking = badgeProps?.variant === 'success';
+        const isWorking = stats.isWorking;
         const isIdle = !isWorking;
 
         if (!CONFIG.isPilotEnabled) return isWorking;
@@ -1172,7 +1197,16 @@
                 window.currentApUptime = 0;
             }
 
-            return { bank, onHand, fuel, currentSector, fuelPct };
+            // 5. Working State Detection (Now handled by standalone loop with accumulation)
+            const isWorking = window.lastDetectedState || false;
+            
+            // Calculate precise rate for telemetry (ratio of positive samples)
+            let rollingRate = isWorking ? 1 : 0;
+            if (window.stateSamples > 0) {
+                rollingRate = window.workingSamples / window.stateSamples;
+            }
+
+            return { bank, onHand, fuel, currentSector, fuelPct, isWorking, rollingRate };
         } catch (e) { return null; }
     }
 
@@ -1344,8 +1378,16 @@
                 fuelThreshold: CONFIG.fuelThreshold || 40,
                 fuelPerStep: window.lastFuelPerStep || 0,
                 apUptime: window.currentApUptime || 0,
+                state: data.rollingRate, // Send the precise accumulated rate
+                apStartTime: localStorage.getItem('gb_ap_start_time') || "",
+                lastStateCheck: window.lastStateCheckTime || new Date().toISOString(),
                 timestamp: new Date().toISOString()
             };
+            
+            // Reset accumulation counters after successful report attempt
+            window.workingSamples = 0;
+            window.stateSamples = 0;
+
             const response = await fetch(CONFIG.webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1388,6 +1430,80 @@
             }
         } else { setTimeout(bootstrap, 500); } 
     };
+
+    /**
+     * INDEPENDENT STATE MONITORING
+     * Optimized to run at its own frequency (2s) for accuracy
+     */
+    function updateWorkingState() {
+        try {
+            let isWorking = false;
+            
+            // 1. Locate the Local Task Engine
+            const containers = [...document.querySelectorAll('div')].filter(el => 
+                el.innerText?.includes('Local Task Engine') || el.innerText?.includes('Local task engine')
+            );
+            
+            const localEngineContainer = containers.find(el => el.offsetHeight > 0)?.closest('.Card, div[class*="bg-card"]');
+            
+            if (localEngineContainer) {
+                const badgeEl = [...localEngineContainer.querySelectorAll('div, span')].find(el => {
+                    const p = getPropsFromFiber(el, ['state']);
+                    return p?.state === 'active' || p?.state === 'steering';
+                });
+                
+                if (badgeEl) {
+                    isWorking = true;
+                } else {
+                    const txt = localEngineContainer.innerText?.toLowerCase() || "";
+                    isWorking = txt.includes('working') || txt.includes('steering');
+                }
+            } else {
+                // Background fallback
+                const badgeEl = [...document.querySelectorAll('div, span')].find(el => {
+                    const p = getPropsFromFiber(el, ['state']);
+                    return p?.state === 'active' || p?.state === 'steering';
+                });
+                if (badgeEl) isWorking = true;
+            }
+
+            // --- LOGGING ON CHANGE ---
+            const checkTime = new Date().toLocaleTimeString();
+            window.lastStateCheckTime = new Date().toISOString();
+            
+            if (window.lastDetectedState !== isWorking) {
+                log(`[GB-Monkey] MONITOR: State transition to ${isWorking ? 'WORKING' : 'IDLE'}`);
+                window.lastDetectedState = isWorking;
+            }
+            
+            // --- UI UPDATE ---
+            const statusEl = document.getElementById('gb-live-status');
+            if (statusEl) {
+                statusEl.innerText = isWorking ? 'WORKING' : 'IDLE';
+                statusEl.style.color = isWorking ? '#22c55e' : '#777';
+                statusEl.style.borderColor = isWorking ? 'rgba(34, 197, 94, 0.4)' : 'rgba(255,255,255,0.1)';
+                statusEl.style.background = isWorking ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255,255,255,0.05)';
+                statusEl.title = `LAST_CHECK: ${checkTime}`;
+            }
+            
+            window.lastDetectedState = isWorking;
+            
+            // --- ACCUMULATION FOR PRECISION ---
+            window.stateSamples++;
+            if (isWorking) window.workingSamples++;
+        } catch (err) {
+            console.error('State monitoring error:', err);
+        }
+    }
+
+    // Initialize local monitoring & accumulation
+    window.lastDetectedState = false;
+    window.lastStateCheckTime = null;
+    window.workingSamples = 0;
+    window.stateSamples = 0;
+
+    setInterval(updateWorkingState, 1000); // 1s frequency for high precision monitoring
+
     bootstrap();
 
     setInterval(() => {

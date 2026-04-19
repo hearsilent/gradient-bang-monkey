@@ -34,6 +34,9 @@ export default {
         fuelPerStep REAL DEFAULT 0,
         isPilotEnabled INTEGER DEFAULT 0,
         apUptime INTEGER DEFAULT 0,
+        state INTEGER DEFAULT 0,
+        apStartTime TEXT,
+        lastStateCheck TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `).run();
@@ -53,6 +56,9 @@ export default {
     await migrate("ALTER TABLE telemetry ADD COLUMN fuelPerStep REAL DEFAULT 0");
     await migrate("ALTER TABLE telemetry ADD COLUMN isPilotEnabled INTEGER DEFAULT 0");
     await migrate("ALTER TABLE telemetry ADD COLUMN apUptime INTEGER DEFAULT 0");
+    await migrate("ALTER TABLE telemetry ADD COLUMN state INTEGER DEFAULT 0");
+    await migrate("ALTER TABLE telemetry ADD COLUMN apStartTime TEXT");
+    await migrate("ALTER TABLE telemetry ADD COLUMN lastStateCheck TEXT");
 
     // GET: Retrieve telemetry
     if (request.method === "GET") {
@@ -78,8 +84,33 @@ export default {
         `).all();
 
         const formattedResults = {};
-        results.forEach(row => {
-          formattedResults[row.charName] = {
+        for (const row of results) {
+          const char = row.charName;
+          const currentApStart = row.apStartTime;
+          
+          // Current Session Rate
+          const sessionStats = await env.gb_banana.prepare(`
+            SELECT AVG(CAST(state AS REAL)) as rate FROM telemetry 
+            WHERE charName = ? AND apStartTime = ? AND isPilotEnabled = 1
+          `).bind(char, currentApStart).first();
+          
+          // Last Session Rate
+          const lastSessionStats = await env.gb_banana.prepare(`
+            SELECT AVG(CAST(state AS REAL)) as rate FROM telemetry 
+            WHERE charName = ? AND apStartTime = (
+              SELECT apStartTime FROM telemetry 
+              WHERE charName = ? AND apStartTime < ? AND apStartTime IS NOT NULL AND apStartTime != ''
+              ORDER BY timestamp DESC LIMIT 1
+            ) AND isPilotEnabled = 1
+          `).bind(char, char, currentApStart).first();
+
+          // Total Rate
+          const totalStats = await env.gb_banana.prepare(`
+            SELECT AVG(CAST(state AS REAL)) as rate FROM telemetry 
+            WHERE charName = ? AND isPilotEnabled = 1
+          `).bind(char).first();
+
+          formattedResults[char] = {
             charName: row.charName,
             bank: row.bank,
             onHand: row.onHand,
@@ -95,9 +126,14 @@ export default {
             fuelPerStep: row.fuelPerStep,
             isPilotEnabled: row.isPilotEnabled,
             apUptime: row.apUptime,
+            state: row.state,
+            lastStateCheck: row.lastStateCheck,
+            workingRateSession: sessionStats?.rate ?? null,
+            workingRateLast: lastSessionStats?.rate ?? null,
+            workingRateTotal: totalStats?.rate ?? null,
             timestamp: row.timestamp
           };
-        });
+        }
 
         return new Response(JSON.stringify(formattedResults), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -106,7 +142,7 @@ export default {
 
       // Return history for specific character
       const { results: historyResults } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, timestamp 
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, state, apStartTime, timestamp 
         FROM telemetry 
         WHERE charName = ? 
         ORDER BY timestamp DESC 
@@ -122,14 +158,14 @@ export default {
     if (request.method === "POST") {
       try {
         const data = await request.json();
-        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, timestamp } = data;
+        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, state, lastStateCheck, apStartTime, timestamp } = data;
 
         if (!charName) throw new Error("Missing charName");
 
         // Insert new record with absolute safety against 'undefined'
         await env.gb_banana.prepare(`
-          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, state, lastStateCheck, apStartTime, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           charName ?? null, 
           bank ?? null, 
@@ -146,6 +182,9 @@ export default {
           fuelPerStep ?? 0, 
           isPilotEnabled ?? 0, 
           apUptime ?? 0, 
+          state ?? 0,
+          lastStateCheck ?? null,
+          apStartTime ?? null,
           timestamp ?? new Date().toISOString()
         ).run();
           
@@ -309,10 +348,11 @@ function generateDashboardHTML() {
             background: #22c55e;
         }
         .char-name {
-            font-size: 16px;
-            font-weight: 900;
+            font-size: 14px;
+            font-weight: 800;
             color: #22c55e;
-            margin-bottom: 15px;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -510,6 +550,7 @@ function generateDashboardHTML() {
         @keyframes push-up {
             0% { transform: translateY(0); }
             100% { transform: translateY(-50%); }
+        }
         /* Stale State (Offline/Disconnected) */
         .card.stale {
             border-color: #ef4444 !important;
@@ -532,14 +573,84 @@ function generateDashboardHTML() {
             opacity: 0.5;
         }
 
+        /* Working Rate Styles */
+        .rate-container {
+            margin-top: 20px;
+            padding: 12px;
+            background: rgba(34, 197, 94, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+        .rate-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        .rate-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .rate-label {
+            font-size: 8px;
+            color: #666;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            letter-spacing: 1px;
+        }
+        .rate-value {
+            font-size: 13px;
+            font-weight: 900;
+            color: #22c55e;
+            text-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+        }
+        .status-badge {
+            font-size: 8px;
+            font-weight: 950;
+            letter-spacing: 1px;
+            padding: 0 5px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 2px;
+            height: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-transform: uppercase;
+            line-height: 1;
+            box-sizing: border-box;
+        }
+        .status-working {
+            background: rgba(34, 197, 94, 0.1) !important;
+            color: #22c55e !important;
+            border: 1px solid rgba(34, 197, 94, 0.4) !important;
+        }
+        .status-idle {
+            background: rgba(100, 100, 100, 0.1);
+            color: #777;
+            border: 1px solid rgba(100, 100, 100, 0.3);
+        }
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
     </style>
 </head>
 <body>
     <div class="noise"></div>
     <div class="container">
-        <div class="header">
-            <h1 class="glitch-text" data-text=">> SYSTEM_MONITOR :: 0xCD1BA">>> SYSTEM_MONITOR :: 0xCD1BA</h1>
-            <div class="timer-text" id="refresh-trigger" title="Click to Force Sync">
+        <div class="header" style="margin-bottom: 25px; width: 100%; max-width: 100vw; overflow: hidden; padding-left: 2px;">
+            <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;">
+                <h1 style="margin: 0; font-size: 14px; color: #22c55e; letter-spacing: 2px; font-weight: 800; white-space: nowrap; line-height: 1.4;">>> SYSTEM_MONITOR ::</h1>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: -2px;">
+                    <h1 style="margin: 0; font-size: 14px; color: #22c55e; letter-spacing: 2px; font-weight: 800; line-height: 1.4;">0xCD1BA</h1>
+                    <span id="global-status-badge" class="status-badge status-working" title="SYSTEM_TACTICAL_STATE">WORKING</span>
+                </div>
+            </div>
+            <div class="timer-text" id="refresh-trigger" title="Click to Force Sync" style="margin-top: 15px; margin-left: -5px;">
                 NEXT_SYNC: <span id="countdown">30</span>S <span class="pulse-dot"></span>
             </div>
             <div class="header-line" id="progress-fill"></div>
@@ -659,7 +770,9 @@ function generateDashboardHTML() {
 
                 card.innerHTML = '\
                     <div class="char-name">\
-                        <span class="glitch-text" data-text="' + name + '">' + name + '</span>\
+                        <div style="display: flex; align-items: center; gap: 10px;">\
+                            <span class="glitch-text" data-text="' + name + '">' + name + '</span>\
+                        </div>\
                         <div class="gb-toggle-chip ' + (isPilotActive ? 'active' : '') + '">\
                             <span class="chip-label">AP</span>\
                             <span class="chip-state">' + (isPilotActive ? 'ON' : 'OFF') + '</span>\
@@ -709,6 +822,21 @@ function generateDashboardHTML() {
                         ' + renderRankItem('Rank_Trade', stats.rankTrading, prevStats?.rankTrading) + '\
                         ' + renderRankItem('Rank_Exp', stats.rankExploration, prevStats?.rankExploration) + '\
                     </div>\
+                    <div class="gb-label" style="margin-top: 25px;">>> PROTOCOL_EFFICIENCY</div>\
+                    <div class="rank-grid" style="margin-top: 5px; background: rgba(34, 197, 94, 0.02);">\
+                        <div class="rank-item">\
+                            <span class="rank-label">SESSION</span>\
+                            <div class="rank-val-container"><div class="rank-val" style="color: #22c55e;">' + (stats.workingRateSession !== null ? (stats.workingRateSession * 100).toFixed(1) + '%' : '--') + '</div></div>\
+                        </div>\
+                        <div class="rank-item">\
+                            <span class="rank-label">LAST</span>\
+                            <div class="rank-val-container"><div class="rank-val" style="color: #666;">' + (stats.workingRateLast !== null ? (stats.workingRateLast * 100).toFixed(1) + '%' : '--') + '</div></div>\
+                        </div>\
+                        <div class="rank-item">\
+                            <span class="rank-label">TOTAL</span>\
+                            <div class="rank-val-container"><div class="rank-val" style="color: #f59e0b; opacity: 0.8;">' + (stats.workingRateTotal !== null ? (stats.workingRateTotal * 100).toFixed(1) + '%' : '--') + '</div></div>\
+                        </div>\
+                    </div>\
                     <div class="timestamp">LAST_SYNC: ' + lastSeen + '</div>\
                 ';
 
@@ -728,6 +856,14 @@ function generateDashboardHTML() {
                     mEl.style.textShadow = '0 0 8px ' + col + '44';
                 }
             });
+
+            // Update Global Status Badge
+            const globalBadge = document.getElementById('global-status-badge');
+            if (globalBadge) {
+                const anyWorking = Object.values(data).some(s => s.state == 1);
+                globalBadge.innerText = anyWorking ? 'WORKING' : 'IDLE';
+                globalBadge.className = 'status-badge ' + (anyWorking ? 'status-working' : 'status-idle');
+            }
         }
 
         let timeLeft = 30;
