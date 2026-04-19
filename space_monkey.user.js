@@ -335,7 +335,19 @@
 
             const dotEl = document.getElementById('gb-status-dot');
             const headerEl = document.getElementById('gb-telemetry-header');
-            if (headerEl) headerEl.title = `LAST_SYNC :: ${new Date().toLocaleTimeString()}`;
+            
+            if (dotEl) {
+                if (window.lastWebhookError) {
+                    dotEl.style.color = '#ff4444';
+                } else {
+                    dotEl.style.color = isConfigReady() ? '#22c55e' : '#f59e0b';
+                }
+            }
+
+            if (headerEl) {
+                const syncMsg = window.lastWebhookError ? `REMOTE_SYNC_ERROR :: ${window.lastWebhookError}` : `REMOTE_SYNC :: OK`;
+                headerEl.title = `LOCAL_SENSE :: ${new Date().toLocaleTimeString()}\n${syncMsg}`;
+            }
 
             return { bank, onHand, fuel };
         } catch (e) { return null; }
@@ -354,6 +366,7 @@
 
     async function reportToWebhook() {
         if (!CONFIG.webhookUrl || !CONFIG.webhookUrl.startsWith('http')) return;
+        
         try {
             const stats = refreshLiveData();
             if (!stats) return;
@@ -364,15 +377,21 @@
                 fuel: stats.fuel,
                 timestamp: new Date().toISOString()
             };
-            await fetch(CONFIG.webhookUrl, {
+            const response = await fetch(CONFIG.webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+
+            if (!response.ok) throw new Error(`HTTP_${response.status}`);
+
+            window.lastWebhookError = null;
             log('Remote telemetry sync successful.');
         } catch (e) {
+            window.lastWebhookError = e.message;
             log('Remote telemetry sync failed: ' + e.message);
         }
+        refreshLiveData(); // Immediate UI update
     }
 
     function schedule(ms) { clearTimeout(window.gbTimeout); window.gbTimeout = setTimeout(automate, ms); }
