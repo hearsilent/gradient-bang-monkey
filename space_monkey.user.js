@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gradient Bang Monkey
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
+// @version      1.1.1
 // @description  Give me 2 x Nano Banana
 // @author       HearSilent
 // @match        https://game.gradient-bang.com/*
