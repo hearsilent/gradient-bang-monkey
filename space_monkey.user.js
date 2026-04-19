@@ -68,12 +68,15 @@
         #gb-tactical-panel.collapsed { transform: translateY(-50%) translateX(-320px); }
         #gb-content { width: 320px; background: rgba(5,5,5,0.95); border: 2px solid ${isConfigReady() ? '#22c55e' : '#ff9900'}; border-left: none; color: #fff; padding: 20px; backdrop-filter: blur(8px); }
         #gb-toggle { background: ${isConfigReady() ? '#22c55e' : '#ff9900'}; color: #000; padding: 20px 6px; cursor: pointer; writing-mode: vertical-lr; text-transform: uppercase; font-size: 11px; font-weight: 950; }
-        .gb-label { font-size: 10px; color: ${isConfigReady() ? '#22c55e' : '#ff9900'}; text-transform: uppercase; margin-bottom: 4px; display: block; font-weight: bold; }
+        .gb-label { font-size: 10px; color: ${isConfigReady() ? '#22c55e' : '#ff9900'}; text-transform: uppercase; margin-bottom: 4px; display: block; font-weight: bold; margin-top: 10px; }
+        .gb-label:first-child { margin-top: 0; }
         .gb-input { width: 100%; background: #000; border: 1px solid #333; color: #fff; padding: 8px; font-size: 12px; box-sizing: border-box; }
-        .btn-group { display: flex; gap: 5px; margin-top: 5px; }
+        .btn-group { display: flex; gap: 5px; margin-top: 10px; }
         .gb-btn { background: ${isConfigReady() ? '#22c55e' : '#ff9900'}; color: #000; border: none; padding: 10px; font-weight: 900; text-transform: uppercase; cursor: pointer; flex: 1; font-size: 10px; }
         .gb-btn-sec { background: #111; color: #fff; border: 1px solid #555; }
-        .gb-btn-danger { background: #111; color: #ef4444; border: 1px solid #ef4444; margin-top: 5px; }
+        .gb-btn-danger { background: #111; color: #ef4444; border: 1px solid #ef4444; margin-top: 10px; }
+        .gb-row { display: flex; gap: 10px; margin-top: 10px; }
+        .gb-col { flex: 1; }
     `;
 
     function initUI() {
@@ -85,11 +88,24 @@
                 <div style="border-bottom: 2px solid ${isConfigReady() ? '#22c55e' : '#ff9900'}; margin-bottom: 15px; padding-bottom: 5px;">
                     <h2 style="margin:0; font-size:16px; color:${isConfigReady() ? '#22c55e' : '#ff9900'}">${isConfigReady() ? '>> SYSTEM READY :: 0xCD1BA' : '>> SETUP REQUIRED'}</h2>
                 </div>
-                <div style="margin-bottom: 15px;">
+                <div style="margin-bottom: 15px; height: 350px; overflow-y: auto; padding-right: 5px;">
                     <span class="gb-label">Access Email</span><input type="text" id="cfg-email" class="gb-input" placeholder="email@example.com" value="${CONFIG.email}">
-                    <span class="gb-label" style="margin-top:10px;">Security Pass</span><input type="password" id="cfg-pass" class="gb-input" value="${CONFIG.pass}">
-                    <span class="gb-label" style="margin-top:10px;">Pilot Name</span><input type="text" id="cfg-char" class="gb-input" placeholder="Pilot-01" value="${CONFIG.charName}">
-                    <span class="gb-label" style="margin-top:10px;">Neural Command</span><textarea id="cfg-cmd" class="gb-input" style="height: 80px; resize: none;">${CONFIG.farmCommand}</textarea>
+                    <span class="gb-label">Security Pass</span><input type="password" id="cfg-pass" class="gb-input" value="${CONFIG.pass}">
+                    <span class="gb-label">Pilot Name</span><input type="text" id="cfg-char" class="gb-input" placeholder="Pilot-01" value="${CONFIG.charName}">
+                    <span class="gb-label">Neural Command</span><textarea id="cfg-cmd" class="gb-input" style="height: 60px; resize: none;">${CONFIG.farmCommand}</textarea>
+                    
+                    <div class="gb-row">
+                        <div class="gb-col">
+                            <span class="gb-label">Idle Check (Sec)</span>
+                            <input type="number" id="cfg-idle" class="gb-input" value="${CONFIG.idleInterval / 1000}">
+                        </div>
+                        <div class="gb-col">
+                            <span class="gb-label">Auto Refresh (Min)</span>
+                            <input type="number" id="cfg-refresh" class="gb-input" value="${CONFIG.refreshInterval / 60000}">
+                        </div>
+                    </div>
+                    <span class="gb-label">Login Grace (Sec)</span>
+                    <input type="number" id="cfg-grace" class="gb-input" value="${CONFIG.loginGraceMs / 1000}">
                 </div>
                 <button id="gb-save-btn" class="gb-btn" style="width:100%; font-size: 12px; margin-bottom:10px;">Update Config & Restart</button>
                 <div class="btn-group">
@@ -109,7 +125,15 @@
         };
         document.getElementById('clear-logs').onclick = () => { if (confirm('Purge all logs?')) { localStorage.removeItem('gb_history'); localStorage.removeItem('gb_leaderboard_history'); location.reload(); }};
         document.getElementById('gb-save-btn').onclick = () => {
-            saveConfig({ email: document.getElementById('cfg-email').value, pass: document.getElementById('cfg-pass').value, charName: document.getElementById('cfg-char').value, farmCommand: document.getElementById('cfg-cmd').value });
+            saveConfig({
+                email: document.getElementById('cfg-email').value,
+                pass: document.getElementById('cfg-pass').value,
+                charName: document.getElementById('cfg-char').value,
+                farmCommand: document.getElementById('cfg-cmd').value,
+                idleInterval: parseInt(document.getElementById('cfg-idle').value) * 1000,
+                refreshInterval: parseInt(document.getElementById('cfg-refresh').value) * 60000,
+                loginGraceMs: parseInt(document.getElementById('cfg-grace').value) * 1000
+            });
             location.reload();
         };
         window.downloadLogs = (format) => {
