@@ -1,0 +1,18 @@
+# Node & Wrangler
+node_modules
+.wrangler
+.dev.vars
+wrangler.toml
+dist
+
+# Reports
+gb_report.json
+gb_report.csv
+
+# OS Files
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+.vscode/
+.idea/

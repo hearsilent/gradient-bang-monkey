@@ -20,7 +20,9 @@
         farmCommand: "your_farm_command",
         idleInterval: 120000,
         refreshInterval: 1800000,
-        loginGraceMs: 30000
+        loginGraceMs: 30000,
+        webhookUrl: '',
+        webhookInterval: 60000
     };
 
     let CONFIG = JSON.parse(localStorage.getItem('gb_tactical_config') || JSON.stringify(DEFAULT_CONFIG));
@@ -158,6 +160,12 @@
                     
                     <span class="gb-label">Login Grace (Sec)</span>
                     <input type="number" id="cfg-grace" class="gb-input" value="${CONFIG.loginGraceMs / 1000}">
+
+                    <span class="gb-label">Remote Webhook URL</span>
+                    <input type="text" id="cfg-webhook" class="gb-input" placeholder="https://your-worker.workers.dev" value="${CONFIG.webhookUrl || ''}">
+                    
+                    <span class="gb-label">Remote Sync Interval (Sec)</span>
+                    <input type="number" id="cfg-webhook-int" class="gb-input" value="${(CONFIG.webhookInterval || 60000) / 1000}">
                 </div>
                 
                 <button id="gb-save-btn" class="gb-btn" style="width:100%">UPDATE CONFIG & RESTART</button>
@@ -194,7 +202,9 @@
                 farmCommand: document.getElementById('cfg-cmd').value,
                 idleInterval: parseInt(document.getElementById('cfg-idle').value) * 1000,
                 refreshInterval: parseInt(document.getElementById('cfg-refresh').value) * 60000,
-                loginGraceMs: parseInt(document.getElementById('cfg-grace').value) * 1000
+                loginGraceMs: parseInt(document.getElementById('cfg-grace').value) * 1000,
+                webhookUrl: document.getElementById('cfg-webhook').value,
+                webhookInterval: parseInt(document.getElementById('cfg-webhook-int').value) * 1000
             });
             location.reload();
         };
@@ -342,8 +352,38 @@
         } catch (e) { }
     }
 
+    async function reportToWebhook() {
+        if (!CONFIG.webhookUrl || !CONFIG.webhookUrl.startsWith('http')) return;
+        try {
+            const stats = refreshLiveData();
+            if (!stats) return;
+            const payload = {
+                charName: CONFIG.charName,
+                bank: stats.bank,
+                onHand: stats.onHand,
+                fuel: stats.fuel,
+                timestamp: new Date().toISOString()
+            };
+            await fetch(CONFIG.webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            log('Remote telemetry sync successful.');
+        } catch (e) {
+            log('Remote telemetry sync failed: ' + e.message);
+        }
+    }
+
     function schedule(ms) { clearTimeout(window.gbTimeout); window.gbTimeout = setTimeout(automate, ms); }
-    const bootstrap = () => { if (document.body) { initUI(); schedule(2000); setInterval(refreshLiveData, 5000); } else { setTimeout(bootstrap, 500); } };
+    const bootstrap = () => { 
+        if (document.body) { 
+            initUI(); schedule(2000); setInterval(refreshLiveData, 5000); 
+            if (CONFIG.webhookUrl) {
+                setInterval(reportToWebhook, CONFIG.webhookInterval || 60000);
+            }
+        } else { setTimeout(bootstrap, 500); } 
+    };
     bootstrap();
 
     setInterval(async () => {

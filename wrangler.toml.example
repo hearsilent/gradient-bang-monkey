@@ -1,0 +1,13 @@
+name = "your-worker-name"
+main = "worker.js"
+compatibility_date = "2026-04-19"
+preview_urls = false
+workers_dev = true
+
+[[routes]]
+pattern = "your-domain.com"
+custom_domain = true
+
+[[kv_namespaces]]
+binding = "GB_BANANA"
+id = "your-kv-namespace-id"
