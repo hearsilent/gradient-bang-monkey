@@ -34,14 +34,13 @@ To enable remote monitoring on your phone or other devices:
    ```bash
    npx wrangler login
    ```
-2. **Create KV Namespace**:
-   Go to the Cloudflare Dashboard -> Workers & Pages -> KV -> Create Namespace named `GB_BANANA`.
-   Alternatively, run:
+2. **Create D1 Database**:
+   Run the following command to create your database:
    ```bash
-   npx wrangler kv:namespace create GB_BANANA
+   npx wrangler d1 create gb-telemetry
    ```
 3. **Configure `wrangler.toml`**:
-   Update the `id` in `wrangler.toml` with the ID generated in the previous step.
+   Copy the provided code snippet (including `database_id`) into your `wrangler.toml`.
 4. **Deploy**:
    ```bash
    npx wrangler deploy

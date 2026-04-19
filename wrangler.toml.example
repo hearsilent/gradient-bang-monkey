@@ -8,6 +8,7 @@ workers_dev = true
 pattern = "your-domain.com"
 custom_domain = true
 
-[[kv_namespaces]]
-binding = "GB_BANANA"
-id = "your-kv-namespace-id"
+[[d1_databases]]
+binding = "gb_banana"
+database_name = "your-database-name"
+database_id = "your-d1-database-id"
