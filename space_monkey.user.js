@@ -542,6 +542,7 @@
             // Reset uptime if toggled OFF
             if (!newState) {
                 localStorage.removeItem('gb_ap_start_time');
+                dispatchCommand('cancel');
             }
 
             const panel = document.getElementById('gb-tactical-panel');
