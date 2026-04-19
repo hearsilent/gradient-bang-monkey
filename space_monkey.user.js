@@ -358,6 +358,17 @@
             vertical-align: middle;
         }
         .gb-reset-btn:hover { color: #ff4444; }
+
+        /* Financial Bridge Orange Theme */
+        #gb-financial-bridge {
+            border-top: 1px solid rgba(245, 158, 11, 0.1);
+            margin-top: 5px;
+            padding-top: 15px;
+            margin-bottom: 15px;
+        }
+        .gb-bridge-btn { background: #f59e0b !important; color: #000 !important; font-weight: 950 !important; }
+        .gb-bridge-btn-sec { background: transparent !important; color: #f59e0b !important; border: 1px solid rgba(245, 158, 11, 0.4) !important; }
+        .gb-bridge-btn-sec:hover { background: rgba(245, 158, 11, 0.05) !important; border-color: #f59e0b !important; }
     `;
 
     function formatDuration(ms) {
@@ -420,7 +431,19 @@
                     <input type="text" id="cfg-char" class="gb-input" placeholder="HearSilent" value="${CONFIG.charName}">
                     
                     <span class="gb-label">Pilot Protocol</span>
-                    <textarea id="cfg-cmd" class="gb-input" style="height: 60px; resize: none;">${CONFIG.pilotProtocol}</textarea>
+                    <textarea id="cfg-cmd" class="gb-input" style="height: 105px; resize: none;">${CONFIG.pilotProtocol}</textarea>
+
+                    <!-- Financial Bridge Section -->
+                    <div id="gb-financial-bridge">
+                        <span class="gb-label" style="color: #f59e0b; margin-top: 20px; display: flex; align-items: center; gap: 6px;">
+                            <span style="opacity: 0.5;">::</span> FINANCIAL_BRIDGE
+                        </span>
+                        <input type="number" id="bank-amount" class="gb-input" style="margin-top: 8px; border-color: rgba(245, 158, 11, 0.2); height: 32px;" placeholder="ENTER AMOUNT...">
+                        <div class="btn-group" style="margin-top: 10px; gap: 6px;">
+                            <button id="btn-deposit" class="gb-btn gb-bridge-btn" title="SHORT: Deposit amount | LONG: Deposit ALL">DEPOSIT</button>
+                            <button id="btn-withdraw" class="gb-btn gb-bridge-btn" title="SHORT: Withdraw amount | LONG: Withdraw ALL">WITHDRAW</button>
+                        </div>
+                    </div>
 
                     <div class="gb-safety-zone" id="safety-config-zone">
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;">
@@ -675,9 +698,90 @@
                 }
             };
         }
+
+        // 6. Financial Bridge Handlers
+        const amtInput = panel.querySelector('#bank-amount');
+        
+        const executeBanking = (type, isAll = false) => {
+            // 1. Proximity Check
+            if (window.lastKnownDistToMega !== 0) {
+                const dist = window.lastKnownDistToMega || 'INF';
+                alert(`⚠️ TACTICAL_ERROR: Mega-port proximity required for banking.\nCurrent distance: ${dist} HOPS.`);
+                log(`ERR: Banking blocked. Not at mega-port.`);
+                return;
+            }
+
+            let amount = "";
+            if (isAll) {
+                const sourceId = type === 'deposit' ? 'val-hand' : 'val-bank';
+                const sourceEl = document.getElementById(sourceId);
+                amount = sourceEl ? sourceEl.innerText.replace(/,/g, '').split('.')[0] : "0";
+                if (amount === "N/A" || amount === "0") {
+                    log(`ERR: No ${type}able balance detected.`);
+                    return;
+                }
+            } else {
+                amount = amtInput.value.trim();
+                if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+                    amtInput.style.borderColor = "#ff4444";
+                    setTimeout(() => { amtInput.style.borderColor = ""; }, 2000);
+                    log(`ERR: Invalid transaction amount.`);
+                    return;
+                }
+            }
+
+            dispatchCommand(`bank ${type} ${amount}`);
+        };
+
+        const bindSmartBanking = (btnId, type) => {
+            const btn = panel.querySelector(btnId);
+            if (!btn) return;
+
+            let timer;
+            let longPressed = false;
+
+            btn.onmousedown = (e) => {
+                longPressed = false;
+                timer = setTimeout(() => {
+                    longPressed = true;
+                    log(`ACTION: Long-press detected for ${type.toUpperCase()}_MAX`);
+                    executeBanking(type, true);
+                }, 750);
+            };
+
+            btn.onmouseup = (e) => {
+                clearTimeout(timer);
+                if (!longPressed) {
+                    executeBanking(type, false);
+                }
+            };
+
+            btn.onmouseleave = () => clearTimeout(timer);
+            // Support touch
+            btn.ontouchstart = btn.onmousedown;
+            btn.ontouchend = btn.onmouseup;
+        };
+
+        bindSmartBanking('#btn-deposit', 'deposit');
+        bindSmartBanking('#btn-withdraw', 'withdraw');
     }
 
-    // 4. Improved State Synchronization (Keep as is)
+    // 4. Improved State Synchronization
+    function dispatchCommand(cmd) {
+        if (!cmd) return;
+        const chatInput = document.querySelector('input[placeholder="Enter command"]');
+        if (!chatInput) { log('ERR: COMMAND_PORT_NOT_FOUND'); return; }
+        
+        syncValue(chatInput, cmd);
+        setTimeout(() => {
+            const btn = chatInput.closest('div').querySelector('button');
+            if (btn) {
+                btn.click();
+                log(`DISPATCH: ${cmd}`);
+            }
+        }, 600);
+    }
+
     function syncValue(el, val) {
         if (!el) return;
         el.focus(); el.value = val;
@@ -746,11 +850,7 @@
         if (stats && stats.fuelPct !== undefined && stats.fuelPct < (CONFIG.fuelThreshold || 0)) {
             if (!window.safetyTriggered) {
                 log(`CRITICAL_SENSE: Fuel at ${stats.fuelPct.toFixed(1)}%. Initiating Safety Protocol...`);
-                syncValue(chatInput, CONFIG.safetyProtocol);
-                setTimeout(() => {
-                    const btn = document.querySelector('input[placeholder="Enter command"]').closest('div').querySelector('button');
-                    if (btn) btn.click();
-                }, 1000);
+                dispatchCommand(CONFIG.safetyProtocol);
                 window.safetyTriggered = true;
             }
             return true; // Occupied by safety
@@ -774,13 +874,9 @@
 
         if (isIdle && !window.pilotStarted) {
             log('STATUS: Idle / Inactive detected. Dispatching protocol...');
-            syncValue(chatInput, CONFIG.pilotProtocol);
-            setTimeout(() => {
-                const btn = document.querySelector('input[placeholder="Enter command"]').closest('div').querySelector('button');
-                if (btn) btn.click();
-                window.pilotStarted = true;
-                setTimeout(() => { window.pilotStarted = false; }, 30000);
-            }, 1000);
+            dispatchCommand(CONFIG.pilotProtocol);
+            window.pilotStarted = true;
+            setTimeout(() => { window.pilotStarted = false; }, 30000);
             return false;
         }
         return isWorking;
@@ -808,53 +904,61 @@
                 }
             }
             
-            const bEl = document.getElementById('val-bank'); if (bEl) bEl.innerText = bank;
-            const hEl = document.getElementById('val-hand'); if (hEl) hEl.innerText = onHand;
-            const fEl = document.getElementById('val-fuel'); 
-            const fcEl = document.getElementById('val-fuel-cost');
-            const warnEl = document.getElementById('safety-warning');
-            
-            let fuelPct = 100;
-            let fuelCur = 0, fuelMax = 0;
+            // 1. Aggressive Data Extraction First
             let currentSector = null;
-            // 1. Regex-based aggressive DOM search
+            let fuelCur = 0, fuelMax = 0, fuelPct = 100;
+
+            // --- Sector Detection (with fallbacks) ---
             const sectorNodes = [...document.querySelectorAll('div, span, button')].filter(el => /Sector\s*\d+/i.test(el.innerText));
             for (const n of sectorNodes) {
                 const m = n.innerText.match(/Sector\s*(\d+)/i);
                 if (m) { currentSector = parseInt(m[1]); break; }
             }
-            
-            // Fuel Parsing
+            if (currentSector === null) {
+                const labels = [...document.querySelectorAll('div, span')].filter(el => el.innerText.trim().toUpperCase() === 'SECTOR');
+                for (const l of labels) {
+                    const val = l.parentElement?.innerText.match(/\d+/) || l.querySelector('span')?.innerText.match(/\d+/);
+                    if (val) { currentSector = parseInt(val[0]); break; }
+                }
+            }
+            if (currentSector === null) {
+                const canvas = document.querySelector('canvas');
+                if (canvas) {
+                    const p = getPropsFromFiber(canvas, ['current_sector_id']);
+                    if (p && p.current_sector_id !== undefined) currentSector = p.current_sector_id;
+                }
+            }
+
+            // --- Fuel Detection ---
             if (fuel !== "N/A") {
                 const [cur, tot] = fuel.split('/').map(n => parseFloat(n.replace(/,/g,'')));
                 fuelCur = cur; fuelMax = tot;
                 if (!isNaN(cur) && !isNaN(tot)) fuelPct = (cur / tot) * 100;
             }
 
-            // Static Siphon: Try to find direct consumption stats from React Props (Optimized via Source Code)
-            if (window.lastFuelPerStep === undefined || window.lastFuelPerStep === 0) {
+            // 2. Static Siphon Telemetry (Harden search logic)
+            if (window.lastFuelPerStep === undefined || window.lastFuelPerStep <= 0) {
                 const shipElements = [
-                    document.getElementById('ship-fuel')?.querySelector('div, span'),
                     document.getElementById('ship-status'),
-                    document.querySelector('canvas'), // Scene usually has current ship data
-                    document.querySelector('div[role="button"]'), // Interactive cards
+                    document.getElementById('ship-fuel')?.querySelector('div, span'),
+                    document.querySelector('canvas'), 
+                    ...document.querySelectorAll('div[role="button"]')
                 ];
 
-                const fields = ['turns_per_warp', 'turnsPerWarp', 'consumption', 'warp_cost'];
+                const fields = ['turns_per_warp', 'turnsPerWarp', 'consumption', 'warp_cost', 'warp_consumption', 'warpConsumption'];
                 
                 for (const el of shipElements) {
                     if (!el) continue;
                     const props = getPropsFromFiber(el);
                     if (!props) continue;
                     
-                    // Recursive search in props (often nested in ship/data/info)
                     const findInObj = (obj, targetFields, depth = 0) => {
-                        if (!obj || depth > 3) return null;
+                        if (!obj || depth > 5) return null;
                         for (const f of targetFields) {
                             if (obj[f] !== undefined && !isNaN(obj[f]) && obj[f] > 0) return obj[f];
                         }
                         for (const key in obj) {
-                            if (typeof obj[key] === 'object') {
+                            if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
                                 const res = findInObj(obj[key], targetFields, depth + 1);
                                 if (res) return res;
                             }
@@ -864,50 +968,80 @@
 
                     const staticVal = findInObj(props, fields);
                     if (staticVal) {
-                        window.lastFuelPerStep = parseFloat(staticVal);
-                        localStorage.setItem('gb_last_fuel_per_step', window.lastFuelPerStep.toString());
-                        log(`System: Static fuel consumption detected: ${window.lastFuelPerStep}/HOP`);
-                        break;
+                        const val = parseFloat(staticVal);
+                        if (val > 0) {
+                            window.lastFuelPerStep = val;
+                            localStorage.setItem('gb_last_fuel_per_step', val.toString());
+                            log(`System: Static fuel consumption detected: ${val}/HOP`);
+                            break;
+                        }
                     }
                 }
                 
-                // Atlas Hauler Special Fallback: If we see the name but can't find the prop
-                if (window.lastFuelPerStep === undefined) {
-                    const isAtlas = [...document.querySelectorAll('span, p')].some(el => el.innerText.includes('Atlas Hauler'));
-                    if (isAtlas) {
+                // Fallbacks: Atlas Hauler & Persistence
+                if (window.lastFuelPerStep === undefined || window.lastFuelPerStep <= 0) {
+                    if ([...document.querySelectorAll('span, p')].some(el => el.innerText.includes('Atlas Hauler'))) {
                         window.lastFuelPerStep = 4;
                         localStorage.setItem('gb_last_fuel_per_step', "4");
+                    } else {
+                        const savedFC = localStorage.getItem('gb_last_fuel_per_step');
+                        if (savedFC) window.lastFuelPerStep = parseFloat(savedFC);
                     }
-                }
-
-                // Global Fallback: Persistence
-                if (window.lastFuelPerStep === undefined) {
-                    const savedFC = localStorage.getItem('gb_last_fuel_per_step');
-                    if (savedFC) window.lastFuelPerStep = parseFloat(savedFC);
                 }
             }
 
-            // Movement-based Calculation (The backup)
+            // 3. Movement-based Calculation (The backup)
             if (window.lastKnownSector !== undefined && currentSector !== null && window.lastKnownSector !== currentSector) {
                 if (window.lastKnownFuel !== undefined && fuelCur < window.lastKnownFuel) {
                     const diff = window.lastKnownFuel - fuelCur;
                     const dist = Math.abs(currentSector - window.lastKnownSector);
-                    if (dist > 0) {
-                        window.lastFuelPerStep = diff / dist;
-                        localStorage.setItem('gb_last_fuel_per_step', window.lastFuelPerStep.toString());
+                    if (dist > 0 && dist < 100) { // Safety check for teleport bugs
+                        const calculated = diff / dist;
+                        if (calculated > 0) {
+                            window.lastFuelPerStep = calculated;
+                            localStorage.setItem('gb_last_fuel_per_step', calculated.toString());
+                        }
                     }
                 }
             }
             window.lastKnownSector = currentSector;
             window.lastKnownFuel = fuelCur;
 
+            // 4. UI Rendering
+            const sEl = document.getElementById('val-sector'); if (sEl) sEl.innerText = currentSector !== null ? currentSector : 'UNKNOWN';
+            const bEl = document.getElementById('val-bank'); if (bEl) bEl.innerText = bank;
+            const hEl = document.getElementById('val-hand'); if (hEl) hEl.innerText = onHand;
+            const fEl = document.getElementById('val-fuel'); 
+            const fcEl = document.getElementById('val-fuel-cost');
+            const warnEl = document.getElementById('safety-warning');
+
             if (fcEl) {
-                const displayVal = window.lastFuelPerStep ? parseFloat(window.lastFuelPerStep.toFixed(2)) : '--';
+                const displayVal = (window.lastFuelPerStep && window.lastFuelPerStep > 0) ? parseFloat(window.lastFuelPerStep.toFixed(2)) : '--';
                 fcEl.innerText = `${displayVal} / HOP`;
             }
 
+            // Proximity Update
+            if (currentSector !== null) {
+                updateMegaPortDistance(currentSector);
+                const mEl = document.getElementById('val-mega'); 
+                if (mEl && window.lastKnownDistToMega !== undefined) {
+                    const idSuffix = window.lastNearestMegaId !== undefined ? ` (${window.lastNearestMegaId})` : '';
+                    const dist = window.lastKnownDistToMega;
+                    const color = (window.lastFuelPerStep && window.lastFuelPerStep > 0) ? 
+                        (dist * window.lastFuelPerStep + 5 > fuelPct ? '#ef4444' : (dist * window.lastFuelPerStep + 15 > fuelPct ? '#f59e0b' : '#22c55e'))
+                        : '#777';
+                    mEl.style.color = color;
+                    mEl.innerText = `${dist} HOP${dist !== 1 ? 'S' : ''}${idSuffix}`;
+                }
+            }
+
+            if (fEl) {
+                fEl.innerText = fuel;
+                fEl.style.color = (fuelPct < (CONFIG.fuelThreshold || 10) + 5) ? '#ef4444' : (fuelPct < (CONFIG.fuelThreshold || 10) + 15 ? '#f59e0b' : '#22c55e');
+            }
+
             // Warning Logic
-            if (warnEl && window.lastKnownDistToMega !== undefined && window.lastFuelPerStep) {
+            if (warnEl && window.lastKnownDistToMega !== undefined && window.lastFuelPerStep && window.lastFuelPerStep > 0) {
                 const needed = window.lastKnownDistToMega * window.lastFuelPerStep;
                 const minSafePct = ((needed / (fuelMax || 1)) * 100) + 5;
                 if (CONFIG.fuelThreshold < minSafePct) {
@@ -917,59 +1051,7 @@
                     warnEl.classList.remove('active');
                 }
             }
-            // 2. Exact match fallback
-            if (currentSector === null) {
-                const labels = [...document.querySelectorAll('div, span')].filter(el => el.innerText.trim().toUpperCase() === 'SECTOR');
-                for (const l of labels) {
-                    const val = l.parentElement?.innerText.match(/\d+/) || l.querySelector('span')?.innerText.match(/\d+/);
-                    if (val) { currentSector = parseInt(val[0]); break; }
-                }
-            }
-            // 3. Fiber fallback (safe for 0)
-            if (currentSector === null) {
-                const canvas = document.querySelector('canvas');
-                if (canvas) {
-                    const p = getPropsFromFiber(canvas, ['current_sector_id']);
-                    if (p && p.current_sector_id !== undefined) currentSector = p.current_sector_id;
-                }
-            }
-            const sEl = document.getElementById('val-sector'); if (sEl) sEl.innerText = currentSector !== null ? currentSector : 'UNKNOWN';
-
-            // Immediate Proximity Update
-            if (currentSector !== null) {
-                updateMegaPortDistance(currentSector);
-                const mEl = document.getElementById('val-mega'); 
-                if (mEl && window.lastKnownDistToMega !== undefined) {
-                    const idSuffix = window.lastNearestMegaId !== undefined ? ` (${window.lastNearestMegaId})` : '';
-                    const dist = window.lastKnownDistToMega;
-                    
-                    // Dynamic Proximity Coloring
-                    let col = '#ff4444'; // Default Danger
-                    if (window.lastFuelPerStep && fuelMax) {
-                        const neededPct = (dist * window.lastFuelPerStep / fuelMax) * 100;
-                        const buffer = 5;
-                        if (neededPct + buffer < CONFIG.fuelThreshold) col = '#22c55e'; // Safe
-                        else if (neededPct < CONFIG.fuelThreshold) col = '#f59e0b'; // Caution
-                    } else {
-                        // Fallback to distance-based if consumption unknown
-                        col = dist <= 5 ? '#22c55e' : (dist <= 12 ? '#f59e0b' : '#ff4444');
-                    }
-                    
-                    mEl.innerText = `${dist} HOPS${idSuffix}`;
-                    mEl.style.color = col;
-                    mEl.style.textShadow = `0 0 8px ${col}44`;
-                }
-            }
-
-            if (fEl) {
-                fEl.innerText = fuel;
-                const [fCur, fTot] = fuel.split('/').map(n => parseInt(n.replace(/,/g,'')));
-                if (!isNaN(fCur) && !isNaN(fTot)) {
-                    const fPct = (fCur / fTot) * 100;
-                    fEl.style.color = fPct < 30 ? '#ff4444' : (fPct < 70 ? '#f59e0b' : '#22c55e');
-                    fEl.style.textShadow = `0 0 8px ${fEl.style.color}44`;
-                }
-            }
+            // End of Telemetry Processing
 
             const dotEl = document.getElementById('gb-status-dot');
             const headerEl = document.getElementById('gb-telemetry-header');
@@ -1021,7 +1103,7 @@
                 }
             }
 
-            // Update Uptime
+            // Update Uptime (Live ticker handled separately, but we update the storage value here)
             if (CONFIG.isPilotEnabled) {
                 let startTime = localStorage.getItem('gb_ap_start_time');
                 if (!startTime) {
@@ -1029,12 +1111,8 @@
                     localStorage.setItem('gb_ap_start_time', startTime);
                 }
                 const uptimeMs = Date.now() - parseInt(startTime);
-                const upEl = document.getElementById('val-uptime');
-                if (upEl) upEl.innerText = formatDuration(uptimeMs);
                 window.currentApUptime = Math.floor(uptimeMs / 1000);
             } else {
-                const upEl = document.getElementById('val-uptime');
-                if (upEl) upEl.innerText = "OFF";
                 window.currentApUptime = 0;
             }
 
@@ -1227,12 +1305,27 @@
         }
     }
 
+    function updateUptimeTicker() {
+        const upEl = document.getElementById('val-uptime');
+        if (!upEl) return;
+        if (CONFIG.isPilotEnabled) {
+            const startTime = localStorage.getItem('gb_ap_start_time');
+            if (startTime) {
+                const uptimeMs = Date.now() - parseInt(startTime);
+                upEl.innerText = formatDuration(uptimeMs);
+            }
+        } else {
+            upEl.innerText = "OFF";
+        }
+    }
+
     function schedule(ms) { clearTimeout(window.gbTimeout); window.gbTimeout = setTimeout(automate, ms); }
     const bootstrap = () => { 
         if (document.body) { 
             initUI(); schedule(2000); 
             refreshLiveData(); // Immediate refresh
             setInterval(refreshLiveData, 5000); 
+            setInterval(updateUptimeTicker, 1000);
             if (CONFIG.webhookUrl) {
                 setTimeout(reportToWebhook, 5000); // Early first sync
                 setInterval(reportToWebhook, CONFIG.webhookInterval || 60000);
