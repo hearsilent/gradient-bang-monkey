@@ -185,7 +185,7 @@
                     <span class="gb-label">Pilot Name</span>
                     <input type="text" id="cfg-char" class="gb-input" placeholder="HearSilent" value="${CONFIG.charName}">
                     
-                    <span class="gb-label">Neural Command</span>
+                    <span class="gb-label">Pilot Command</span>
                     <textarea id="cfg-cmd" class="gb-input" style="height: 80px; resize: none;">${CONFIG.pilotCommand}</textarea>
                     
                     <div class="btn-group" style="margin-top: 5px;">
