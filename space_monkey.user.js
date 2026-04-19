@@ -539,9 +539,17 @@
             const newState = !CONFIG.isPilotEnabled;
             saveConfig({ isPilotEnabled: newState });
             
-            // Reset uptime if toggled OFF
-            if (!newState) {
+            // Immediate Action
+            if (newState) {
+                localStorage.setItem('gb_ap_start_time', Date.now().toString());
+                triggerPilotProtocol();
+            } else {
                 localStorage.removeItem('gb_ap_start_time');
+                if (window.pilotTimeout) {
+                    clearTimeout(window.pilotTimeout);
+                    window.pilotTimeout = null;
+                }
+                window.pilotStarted = false;
                 dispatchCommand('cancel');
             }
 
@@ -823,6 +831,21 @@
         el.dispatchEvent(new Event('change', { bubbles: true }));
         el.blur();
     }
+    
+    function triggerPilotProtocol() {
+        if (!CONFIG.isPilotEnabled) return;
+        const cmd = CONFIG.pilotProtocol;
+        if (!cmd || cmd === 'your_pilot_protocol') return;
+
+        dispatchCommand(cmd);
+        window.pilotStarted = true;
+
+        if (window.pilotTimeout) clearTimeout(window.pilotTimeout);
+        window.pilotTimeout = setTimeout(() => {
+            window.pilotStarted = false;
+            window.pilotTimeout = null;
+        }, CONFIG.protocolInterval || 60000);
+    }
 
     // 5. Automation Core
     async function automate() {
@@ -906,9 +929,7 @@
 
         if (!shouldSkip && !window.pilotStarted) {
             log(isIdle ? 'STATUS: Idle / Inactive detected. Dispatching protocol...' : 'STATUS: Dispatching protocol (SkipWhenWorking disabled)...');
-            dispatchCommand(CONFIG.pilotProtocol);
-            window.pilotStarted = true;
-            setTimeout(() => { window.pilotStarted = false; }, CONFIG.protocolInterval || 60000);
+            triggerPilotProtocol();
             return isWorking;
         }
         return isWorking;
