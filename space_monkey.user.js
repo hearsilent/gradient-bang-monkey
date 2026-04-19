@@ -394,15 +394,17 @@
                 const lbResponse = await fetch('https://api.gradient-bang.com/functions/v1/leaderboard_resources');
                 const lbData = await lbResponse.json();
                 if (lbData.success) {
-                    const findR = (arr) => {
-                        const humanArr = (arr || []).filter(p => p.player_type === 'human');
-                        const idx = humanArr.findIndex(p => p.player_name?.trim().toUpperCase() === CONFIG.charName.trim().toUpperCase());
+                    const findR = (arr, field) => {
+                        const list = (arr || [])
+                            .filter(p => p.player_type === 'human')
+                            .sort((a, b) => (b[field] || 0) - (a[field] || 0));
+                        const idx = list.findIndex(p => p.player_name?.trim().toUpperCase() === CONFIG.charName.trim().toUpperCase());
                         return idx !== -1 ? `#${idx + 1}` : "N/A";
                     };
                     
-                    rankWealth = findR(lbData.wealth);
-                    rankTrading = findR(lbData.trading);
-                    rankExploration = findR(lbData.exploration);
+                    rankWealth = findR(lbData.wealth, 'total_wealth');
+                    rankTrading = findR(lbData.trading, 'total_trades');
+                    rankExploration = findR(lbData.exploration, 'sectors_visited');
 
                     const myWealth = lbData.wealth?.find(p => p.player_name?.trim().toUpperCase() === CONFIG.charName.trim().toUpperCase());
                     if (myWealth) totalWealth = myWealth.total_wealth.toLocaleString();
