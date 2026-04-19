@@ -879,6 +879,7 @@
 
         dispatchCommand(cmd);
         window.pilotStarted = true;
+        window.lastProtocolTriggerTime = Date.now();
 
         if (window.pilotTimeout) clearTimeout(window.pilotTimeout);
         window.pilotTimeout = setTimeout(() => {
@@ -899,7 +900,19 @@
         if (chatInput && chatInput.offsetParent !== null) {
             captureStats();
             const worked = handleBridge(chatInput);
-            schedule(worked ? CONFIG.idleInterval : 5000);
+            let nextPoll = worked ? CONFIG.idleInterval : 5000;
+            
+            // Optimization: If Pilot is enabled and we are waiting for the next interval trigger,
+            // ensure we don't sleep past the next scheduled protocol dispatch.
+            if (CONFIG.isPilotEnabled && window.pilotStarted && window.lastProtocolTriggerTime) {
+                const elapsed = Date.now() - window.lastProtocolTriggerTime;
+                const remaining = (CONFIG.protocolInterval || 60000) - elapsed;
+                if (remaining > 0 && remaining < nextPoll) {
+                    nextPoll = Math.max(5000, remaining + 500); // Wake up right after interval expires
+                }
+            }
+            
+            schedule(nextPoll);
             return;
         }
 
@@ -1498,6 +1511,8 @@
     // Initialize local monitoring & accumulation
     window.lastDetectedState = false;
     window.lastStateCheckTime = null;
+    window.pilotStarted = false;
+    window.lastProtocolTriggerTime = 0;
     window.workingSamples = 0;
     window.stateSamples = 0;
 
