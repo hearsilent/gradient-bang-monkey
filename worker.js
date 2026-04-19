@@ -29,6 +29,8 @@ export default {
         totalWealth TEXT,
         currentSector INTEGER,
         distToMega INTEGER,
+        nearestMegaId INTEGER,
+        fuelThreshold INTEGER DEFAULT 40,
         isPilotEnabled INTEGER DEFAULT 0,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -45,6 +47,7 @@ export default {
     await migrate("ALTER TABLE telemetry ADD COLUMN currentSector INTEGER");
     await migrate("ALTER TABLE telemetry ADD COLUMN distToMega INTEGER");
     await migrate("ALTER TABLE telemetry ADD COLUMN nearestMegaId INTEGER");
+    await migrate("ALTER TABLE telemetry ADD COLUMN fuelThreshold INTEGER DEFAULT 40");
     await migrate("ALTER TABLE telemetry ADD COLUMN isPilotEnabled INTEGER DEFAULT 0");
 
     // GET: Retrieve telemetry
@@ -84,6 +87,7 @@ export default {
             currentSector: row.currentSector,
             distToMega: row.distToMega,
             nearestMegaId: row.nearestMegaId,
+            fuelThreshold: row.fuelThreshold,
             isPilotEnabled: row.isPilotEnabled,
             timestamp: row.timestamp
           };
@@ -101,7 +105,7 @@ export default {
     `).all(); // Note: simplified for brevity, following existing pattern in the file if needed.
     // Actually, following lines 96-102:
     const { results: historyResults } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled, timestamp 
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, timestamp 
         FROM telemetry 
         WHERE charName = ? 
         ORDER BY timestamp DESC 
@@ -117,15 +121,15 @@ export default {
     if (request.method === "POST") {
       try {
         const data = await request.json();
-        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled, timestamp } = data;
+        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, timestamp } = data;
 
         if (!charName) throw new Error("Missing charName");
 
         // Insert new record
         await env.gb_banana.prepare(`
-          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled || 0, timestamp || new Date().toISOString()).run();
+          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold || 40, isPilotEnabled || 0, timestamp || new Date().toISOString()).run();
           
         return new Response("OK", { headers: corsHeaders });
       } catch (err) {
@@ -335,7 +339,7 @@ function generateDashboardHTML() {
             background: #111;
             margin-top: 4px;
             border-radius: 2px;
-            overflow: hidden;
+            position: relative;
         }
         .fuel-bar {
             height: 100%;
@@ -373,12 +377,24 @@ function generateDashboardHTML() {
             display: flex;
             flex-direction: column;
             align-items: center;
+            height: 48px;
+            padding-top: 4px;
         }
         .rank-label {
             font-size: 7px;
             color: #666;
-            margin-bottom: 2px;
+            margin-bottom: 0px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .rank-val-container {
+            position: relative;
+            height: 1.2em;
+            overflow: hidden;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-top: 14px;
         }
         .rank-val {
             font-size: 11px;
@@ -616,7 +632,9 @@ function generateDashboardHTML() {
                         <span class="stat-value" style="color: ' + fCol + ';">' + stats.fuel + '</span>\
                     </div>\
                     <div class="fuel-container">\
-                        <div class="fuel-bar" style="width: ' + fPct + '%; background: ' + fCol + ';"></div>\
+                        <div class="fuel-bar" style="width: ' + fPct + '%; background: ' + fCol + '; border-radius: 2px; height: 100%;"></div>\
+                        <div style="position: absolute; left: ' + (stats.fuelThreshold || 40) + '%; top: -2px; bottom: -2px; width: 1px; background: #ff4444; z-index: 10; box-shadow: 0 0 5px rgba(255, 68, 68, 0.4);"></div>\
+                        <div style="position: absolute; left: ' + (stats.fuelThreshold || 40) + '%; top: 9px; transform: translateX(-50%); font-size: 7px; color: #ff4444; font-weight: 800; white-space: nowrap; letter-spacing: 0.5px; text-shadow: 0 0 5px rgba(255, 68, 68, 0.3);">LIMIT: ' + (stats.fuelThreshold || 40) + '%</div>\
                     </div>\
                     <div class="stat-row" style="margin-top: 15px;">\
                         <span class="stat-label">TOTAL_WEALTH</span>\

@@ -18,6 +18,8 @@
         pass: 'your_password',
         charName: 'your_character_name',
         pilotProtocol: "your_pilot_protocol",
+        safetyProtocol: "Cancel current mission, return to nearest mega-port and refill fuel",
+        fuelThreshold: 40,
         idleInterval: 120000,
         refreshInterval: 1800000,
         loginGraceMs: 30000,
@@ -218,6 +220,115 @@
         .gb-rank-purple { color: #a78bfa !important; text-shadow: 0 0 10px rgba(167, 139, 250, 0.4) !important; }
         .gb-rank-green { color: #4ade80 !important; text-shadow: 0 0 10px rgba(74, 222, 128, 0.3) !important; }
         .gb-rank-gray { color: #6b7280 !important; text-shadow: none !important; opacity: 0.8; }
+        .gb-warning { background: rgba(68, 17, 17, 0.4); border: 1px solid #ff4444; color: #ff4444; padding: 10px; font-size: 10px; margin-top: 10px; border-radius: 4px; display: none; }
+        .gb-warning.active { display: block; animation: pulse-red 2s infinite; }
+        @keyframes pulse-red { 
+            0% { border-color: #ff4444; box-shadow: 0 0 5px rgba(255, 68, 68, 0.2); }
+            50% { border-color: #ff8888; box-shadow: 0 0 15px rgba(255, 68, 68, 0.5); }
+            100% { border-color: #ff4444; box-shadow: 0 0 5px rgba(255, 68, 68, 0.2); }
+        }
+        .gb-btn-set { background: #333; color: #fff; border: 1px solid #444; padding: 2px 8px; font-size: 9px; cursor: pointer; border-radius: 2px; }
+        .gb-btn-set:hover { background: #444; border-color: #666; }
+        .gb-label-red { color: #ff4444 !important; }
+        
+        /* Premium Safety Zone */
+        .gb-safety-zone { 
+            background: rgba(255, 68, 68, 0.04); 
+            border: 1px solid rgba(255, 68, 68, 0.1); 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 15px 0;
+            position: relative;
+            box-shadow: inset 0 0 20px rgba(255, 68, 68, 0.02);
+        }
+        .gb-safety-zone::after {
+            content: 'SAFETY_SYSTEM_ENGAGED';
+            position: absolute;
+            bottom: 4px;
+            right: 8px;
+            font-size: 6.5px;
+            color: rgba(255, 68, 68, 0.3);
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+        
+        .gb-input-red { border-color: rgba(255, 68, 68, 0.4) !important; color: #ff8888 !important; background: rgba(255, 68, 68, 0.05) !important; }
+        .gb-input-red:focus { border-color: #ff4444 !important; box-shadow: 0 0 12px rgba(255, 68, 68, 0.15) !important; }
+
+        .gb-label-modified { color: #ff4444 !important; text-shadow: 0 0 8px rgba(255, 68, 68, 0.3) !important; }
+
+        .gb-btn-set-green {
+            background: rgba(34, 197, 94, 0.1) !important;
+            border: 1px solid rgba(34, 197, 94, 0.5) !important;
+            color: #22c55e !important;
+            text-shadow: 0 0 5px rgba(34, 197, 94, 0.2);
+            transition: all 0.2s !important;
+        }
+        .gb-btn-set-green:hover:not(.disabled) {
+            border-color: #22c55e !important;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+            background: rgba(34, 197, 94, 0.2) !important;
+        }
+        .gb-btn-set-green.disabled {
+            opacity: 0.3;
+            pointer-events: none;
+            filter: grayscale(1);
+            border-color: #444 !important;
+        }
+
+        /* Premium Tactical Slider */
+        .gb-slider-container {
+            position: relative;
+            width: 100%;
+            height: 32px;
+            display: grid;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .gb-slider-track-bg {
+            grid-area: 1/1;
+            width: 100%;
+            height: 2px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 1px;
+            z-index: 1;
+        }
+        .gb-slider-track-fill {
+            grid-area: 1/1;
+            height: 2px;
+            background: #ff4444;
+            border-radius: 1px;
+            z-index: 2;
+            pointer-events: none;
+            transition: background 0.3s;
+        }
+        .gb-slider-native {
+            grid-area: 1/1;
+            width: 100%;
+            height: 32px;
+            background: transparent !important;
+            z-index: 3;
+            -webkit-appearance: none;
+            margin: 0 !important;
+            cursor: pointer;
+            outline: none;
+        }
+        .gb-slider-native::-webkit-slider-runnable-track { background: transparent; border: none; }
+        .gb-slider-native::-webkit-slider-thumb { 
+            -webkit-appearance: none; 
+            width: 14px; 
+            height: 14px; 
+            background: var(--thumb-color, #444); 
+            border-radius: 50%; 
+            cursor: pointer; 
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            box-shadow: 0 0 12px var(--thumb-color, transparent);
+            border: none;
+            margin-top: 0;
+            position: relative;
+            top: 0;
+        }
+        .gb-slider-native::-webkit-slider-thumb:hover { transform: scale(1.2); box-shadow: 0 0 18px var(--thumb-color, transparent); }
     `;
 
     function initUI() {
@@ -249,6 +360,7 @@
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>LOC_SECTOR</span><span id="val-sector" class="gb-stat-value">UNKNOWN</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>MEGA_PROXIMITY</span><span id="val-mega" class="gb-stat-value">INF</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>FUEL_CONSUMPTION</span><span id="val-fuel-cost" class="gb-stat-value">-- / HOP</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>RANK [ W / T / E ]</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
                     </div>
                     <div id="gb-collapse-toggle"></div>
@@ -264,7 +376,26 @@
                     <input type="text" id="cfg-char" class="gb-input" placeholder="HearSilent" value="${CONFIG.charName}">
                     
                     <span class="gb-label">Pilot Protocol</span>
-                    <textarea id="cfg-cmd" class="gb-input" style="height: 80px; resize: none;">${CONFIG.pilotProtocol}</textarea>
+                    <textarea id="cfg-cmd" class="gb-input" style="height: 60px; resize: none;">${CONFIG.pilotProtocol}</textarea>
+
+                    <div class="gb-safety-zone" id="safety-config-zone">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;">
+                            <span class="gb-label" id="label-safety-threshold" style="margin: 0; display: flex; align-items: center;">SAFETY_THRESHOLD</span>
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <span id="fuel-pct-display" style="font-size: 11px; color: #777; font-weight: 950; min-width: 35px; text-align: right; line-height: 1;">${CONFIG.fuelThreshold}%</span>
+                                <button id="set-fuel-pct" class="gb-btn-set gb-btn-set-green disabled">SET</button>
+                            </div>
+                        </div>
+                        <div class="gb-slider-container">
+                            <div class="gb-slider-track-bg"></div>
+                            <div id="slider-fill" class="gb-slider-track-fill"></div>
+                            <input type="range" id="cfg-fuel-threshold" class="gb-slider-native" min="10" max="90" value="${CONFIG.fuelThreshold}">
+                        </div>
+                        <div id="safety-warning" class="gb-warning" style="margin-bottom: 15px;"></div>
+
+                        <span class="gb-label" id="label-safety-protocol">SAFETY_PROTOCOL</span>
+                        <textarea id="cfg-safety-cmd" class="gb-input" style="height: 105px; resize: none; font-size: 11px; line-height: 1.5; font-weight: 400; margin-bottom: 2px; padding: 10px;">${CONFIG.safetyProtocol}</textarea>
+                    </div>
                     
                     <div class="btn-group" style="margin-top: 5px;">
                         <div style="flex: 1;">
@@ -341,6 +472,8 @@
                 pass: document.getElementById('cfg-pass').value,
                 charName: document.getElementById('cfg-char').value,
                 pilotProtocol: document.getElementById('cfg-cmd').value,
+                safetyProtocol: document.getElementById('cfg-safety-cmd').value,
+                fuelThreshold: parseInt(document.getElementById('cfg-fuel-threshold').value),
                 idleInterval: parseInt(document.getElementById('cfg-idle').value) * 1000,
                 refreshInterval: parseInt(document.getElementById('cfg-refresh').value) * 60000,
                 loginGraceMs: parseInt(document.getElementById('cfg-grace').value) * 1000,
@@ -349,6 +482,69 @@
             });
             location.reload();
         };
+
+        const setBtn = document.getElementById('set-fuel-pct');
+        const pctSlider = document.getElementById('cfg-fuel-threshold');
+        const pctDisplay = document.getElementById('fuel-pct-display');
+        const sliderFill = document.getElementById('slider-fill');
+        const cmdInput = document.getElementById('cfg-safety-cmd');
+        const labelThreshold = document.getElementById('label-safety-threshold');
+        const labelProtocol = document.getElementById('label-safety-protocol');
+        
+        const updateSafetyUIState = () => {
+            const val = parseInt(pctSlider.value);
+            const protocol = cmdInput.value;
+            const changedThreshold = val !== CONFIG.fuelThreshold;
+            const changedProtocol = protocol !== CONFIG.safetyProtocol;
+
+            // Update Label / Input Styles
+            labelThreshold.classList.toggle('gb-label-modified', changedThreshold);
+            labelProtocol.classList.toggle('gb-label-modified', changedProtocol);
+            cmdInput.classList.toggle('gb-input-red', changedProtocol);
+            
+            // Enable/Disable SET button
+            setBtn.classList.toggle('disabled', !changedThreshold && !changedProtocol);
+
+            // Update Slider Color & Fill Logic (Always active, not grey)
+            const h = (val - 10) * (120 / 80);
+            const color = `hsl(${h}, 80%, 50%)`;
+            
+            // Calculate precise fill width
+            const pct = (val - 10) / 80 * 100;
+            if (sliderFill) {
+                sliderFill.style.width = `${pct}%`;
+                sliderFill.style.background = color;
+                sliderFill.style.boxShadow = `0 0 10px ${color}33`;
+            }
+            
+            pctSlider.style.setProperty('--thumb-color', color);
+            pctDisplay.style.color = color;
+            pctDisplay.style.textShadow = `0 0 8px ${color}66`;
+        };
+
+        if (pctSlider && pctDisplay && cmdInput) {
+            updateSafetyUIState();
+            pctSlider.oninput = () => {
+                pctDisplay.innerText = `${pctSlider.value}%`;
+                updateSafetyUIState();
+            };
+            cmdInput.oninput = updateSafetyUIState;
+        }
+
+        if (setBtn && pctSlider) {
+            setBtn.onclick = () => {
+                const val = parseInt(pctSlider.value);
+                const protocol = cmdInput.value;
+                saveConfig({ fuelThreshold: val, safetyProtocol: protocol });
+                setBtn.innerText = 'SAVED';
+                setBtn.classList.add('disabled');
+                setTimeout(() => { 
+                    setBtn.innerText = 'SET';
+                    updateSafetyUIState();
+                }, 2000);
+                log(`Safety configuration updated.`);
+            };
+        }
         window.downloadLogs = (format) => {
             const h = JSON.parse(localStorage.getItem('gb_history') || '[]');
             const l = JSON.parse(localStorage.getItem('gb_leaderboard_history') || '[]');
@@ -480,6 +676,25 @@
         window.charSelected = false;
         if (window.loginGraceTimer && Date.now() < window.loginGraceTimer) return false;
 
+        // --- SAFETY MECHANISM (Highest Priority) ---
+        const stats = refreshLiveData();
+        if (stats && stats.fuelPct !== undefined && stats.fuelPct < (CONFIG.fuelThreshold || 0)) {
+            if (!window.safetyTriggered) {
+                log(`CRITICAL_SENSE: Fuel at ${stats.fuelPct.toFixed(1)}%. Initiating Safety Protocol...`);
+                syncValue(chatInput, CONFIG.safetyProtocol);
+                setTimeout(() => {
+                    const btn = document.querySelector('input[placeholder="Enter command"]').closest('div').querySelector('button');
+                    if (btn) btn.click();
+                }, 1000);
+                window.safetyTriggered = true;
+            }
+            return true; // Occupied by safety
+        }
+        if (stats && stats.fuelPct > (CONFIG.fuelThreshold || 0) + 5) {
+            window.safetyTriggered = false; // Reset safety when fuel is safe
+        }
+        // -------------------------------------------
+
         const statusBadgeEl = [...document.querySelectorAll('div, span')].find(el => {
             const p = getPropsFromFiber(el, ['border', 'variant']);
             return p?.border === 'bracket';
@@ -531,13 +746,51 @@
             const bEl = document.getElementById('val-bank'); if (bEl) bEl.innerText = bank;
             const hEl = document.getElementById('val-hand'); if (hEl) hEl.innerText = onHand;
             const fEl = document.getElementById('val-fuel'); 
+            const fcEl = document.getElementById('val-fuel-cost');
+            const warnEl = document.getElementById('safety-warning');
             
+            let fuelPct = 100;
+            let fuelCur = 0, fuelMax = 0;
             let currentSector = null;
             // 1. Regex-based aggressive DOM search
             const sectorNodes = [...document.querySelectorAll('div, span, button')].filter(el => /Sector\s*\d+/i.test(el.innerText));
             for (const n of sectorNodes) {
                 const m = n.innerText.match(/Sector\s*(\d+)/i);
                 if (m) { currentSector = parseInt(m[1]); break; }
+            }
+            
+            // Fuel Parsing
+            if (fuel !== "--/--") {
+                const [cur, tot] = fuel.split('/').map(n => parseInt(n.replace(/,/g,'')));
+                fuelCur = cur; fuelMax = tot;
+                if (!isNaN(cur) && !isNaN(tot)) fuelPct = (cur / tot) * 100;
+            }
+
+            // Consumption Detection
+            if (window.lastKnownSector !== undefined && currentSector !== null && window.lastKnownSector !== currentSector) {
+                if (window.lastKnownFuel !== undefined && fuelCur < window.lastKnownFuel) {
+                    const diff = window.lastKnownFuel - fuelCur;
+                    const dist = Math.abs(currentSector - window.lastKnownSector);
+                    if (dist > 0) window.lastFuelPerStep = diff / dist;
+                }
+            }
+            window.lastKnownSector = currentSector;
+            window.lastKnownFuel = fuelCur;
+
+            if (fcEl) {
+                fcEl.innerText = window.lastFuelPerStep ? `${window.lastFuelPerStep.toFixed(1)} / HOP` : '-- / HOP';
+            }
+
+            // Warning Logic
+            if (warnEl && window.lastKnownDistToMega !== undefined && window.lastFuelPerStep) {
+                const needed = window.lastKnownDistToMega * window.lastFuelPerStep;
+                const minSafePct = ((needed / (fuelMax || 1)) * 100) + 5;
+                if (CONFIG.fuelThreshold < minSafePct) {
+                    warnEl.innerHTML = `⚠️ THRESHOLD TOO LOW<br>Need ~${needed.toFixed(0)} fuel to reach Mega (${minSafePct.toFixed(0)}%).<br>Suggested: ${Math.ceil(minSafePct)}%`;
+                    warnEl.classList.add('active');
+                } else {
+                    warnEl.classList.remove('active');
+                }
             }
             // 2. Exact match fallback
             if (currentSector === null) {
@@ -597,7 +850,7 @@
                 headerEl.title = `LOCAL_SENSE :: ${new Date().toLocaleTimeString()}\n${syncMsg}`;
             }
 
-            return { bank, onHand, fuel, currentSector };
+            return { bank, onHand, fuel, currentSector, fuelPct };
         } catch (e) { return null; }
     }
 
@@ -737,6 +990,7 @@
                 rankTrading,
                 rankExploration,
                 totalWealth,
+                fuelThreshold: CONFIG.fuelThreshold || 40,
                 timestamp: new Date().toISOString()
             };
             const response = await fetch(CONFIG.webhookUrl, {
