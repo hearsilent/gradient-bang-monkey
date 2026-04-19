@@ -70,10 +70,18 @@
         #gb-tactical-panel { position: fixed; left: 0; top: 48px; z-index: 99999; display: flex; align-items: flex-start; font-family: 'Consolas', 'Roboto Mono', monospace; transition: transform 0.4s; }
         #gb-tactical-panel.collapsed { transform: translateX(-320px); }
         #gb-content { width: 320px; background: rgba(8,8,8,0.98); border: 1px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; border-left: none; color: #eee; padding: 20px; backdrop-filter: blur(12px); box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
-        #gb-toggle { background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; color: #000; padding: 24px 8px; cursor: pointer; writing-mode: vertical-lr; text-transform: uppercase; font-size: 10px; font-weight: 900; letter-spacing: 1px; border-radius: 0 4px 4px 0; }
+        #gb-toggle { background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; color: #000; padding: 24px 8px; cursor: pointer; writing-mode: vertical-lr; text-transform: uppercase; font-size: 10px; font-weight: 900; letter-spacing: 1px; border-radius: 0 4px 4px 0; transition: background 0.3s; }
         
-        .gb-header { border-bottom: 2px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; margin-bottom: 20px; padding-bottom: 8px; }
-        .gb-header h2 { margin: 0; font-size: 15px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; letter-spacing: 1px; }
+        #gb-tactical-panel.gb-off #gb-toggle { background: #666 !important; }
+        #gb-tactical-panel.gb-off #gb-content { border-color: #444 !important; }
+        #gb-tactical-panel.gb-off .gb-header { border-bottom-color: #444 !important; }
+        #gb-tactical-panel.gb-off .gb-header h2 { color: #666 !important; }
+        #gb-tactical-panel.gb-off .gb-label { color: #666 !important; }
+        #gb-tactical-panel.gb-off .gb-stat-value { color: #888 !important; text-shadow: none !important; }
+        #gb-tactical-panel.gb-off .gb-telemetry::before { background: #666 !important; box-shadow: none !important; }
+
+        .gb-header { border-bottom: 2px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; margin-bottom: 20px; padding-bottom: 8px; transition: border-color 0.3s; }
+        .gb-header h2 { margin: 0; font-size: 15px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; letter-spacing: 1px; transition: color 0.3s; }
 
         .gb-label { font-size: 10px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-transform: uppercase; margin-bottom: 6px; display: block; font-weight: 800; opacity: 0.9; margin-top: 14px; letter-spacing: 1px; }
         .gb-label:first-child { margin-top: 0; }
@@ -144,7 +152,8 @@
     function initUI() {
         if (document.getElementById('gb-tactical-panel')) return;
         const styleEl = document.createElement('style'); styleEl.innerHTML = styles; document.head.appendChild(styleEl);
-        const panel = document.createElement('div'); panel.id = 'gb-tactical-panel'; panel.className = 'collapsed';
+        const panel = document.createElement('div'); panel.id = 'gb-tactical-panel'; 
+        panel.className = 'collapsed' + (CONFIG.isPilotEnabled ? '' : ' gb-off');
         panel.innerHTML = `
             <div id="gb-content">
                 <div class="gb-header">
@@ -240,6 +249,8 @@
             }
             const newState = !CONFIG.isPilotEnabled;
             saveConfig({ isPilotEnabled: newState });
+            const panel = document.getElementById('gb-tactical-panel');
+            if (panel) panel.classList.toggle('gb-off', !newState);
             const chip = e.currentTarget;
             chip.classList.toggle('active', newState);
             chip.querySelector('.chip-state').innerText = newState ? 'ON' : 'OFF';
