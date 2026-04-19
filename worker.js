@@ -27,6 +27,8 @@ export default {
         rankTrading TEXT,
         rankExploration TEXT,
         totalWealth TEXT,
+        currentSector INTEGER,
+        distToMega INTEGER,
         isPilotEnabled INTEGER DEFAULT 0,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -40,6 +42,8 @@ export default {
     await migrate("ALTER TABLE telemetry ADD COLUMN rankTrading TEXT");
     await migrate("ALTER TABLE telemetry ADD COLUMN rankExploration TEXT");
     await migrate("ALTER TABLE telemetry ADD COLUMN totalWealth TEXT");
+    await migrate("ALTER TABLE telemetry ADD COLUMN currentSector INTEGER");
+    await migrate("ALTER TABLE telemetry ADD COLUMN distToMega INTEGER");
     await migrate("ALTER TABLE telemetry ADD COLUMN isPilotEnabled INTEGER DEFAULT 0");
 
     // GET: Retrieve telemetry
@@ -76,6 +80,8 @@ export default {
             rankTrading: row.rankTrading,
             rankExploration: row.rankExploration,
             totalWealth: row.totalWealth,
+            currentSector: row.currentSector,
+            distToMega: row.distToMega,
             isPilotEnabled: row.isPilotEnabled,
             timestamp: row.timestamp
           };
@@ -88,7 +94,7 @@ export default {
 
       // Return history for specific character
       const { results } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, isPilotEnabled, timestamp 
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, isPilotEnabled, timestamp 
         FROM telemetry 
         WHERE charName = ? 
         ORDER BY timestamp DESC 
@@ -104,15 +110,15 @@ export default {
     if (request.method === "POST") {
       try {
         const data = await request.json();
-        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, isPilotEnabled, timestamp } = data;
+        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, isPilotEnabled, timestamp } = data;
 
         if (!charName) throw new Error("Missing charName");
 
         // Insert new record
         await env.gb_banana.prepare(`
-          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, isPilotEnabled, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, isPilotEnabled || 0, timestamp || new Date().toISOString()).run();
+          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, isPilotEnabled, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, isPilotEnabled || 0, timestamp || new Date().toISOString()).run();
           
         return new Response("OK", { headers: corsHeaders });
       } catch (err) {
@@ -455,6 +461,14 @@ function generateDashboardHTML() {
                     <div class="stat-row">
                         <span class="stat-label">CREDITS_HAND</span>
                         <span class="stat-value">\${stats.onHand}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">CURRENT_LOCATION</span>
+                        <span class="stat-value">SECTOR \${stats.currentSector || '???' }</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">MEGA_PORT_PROXIMITY</span>
+                        <span class="stat-value">\${stats.distToMega !== null ? stats.distToMega + ' HOPS' : 'INF' }</span>
                     </div>
                     <div class="stat-row" style="border-bottom: none;">
                         <span class="stat-label">FUEL_CAPACITY</span>

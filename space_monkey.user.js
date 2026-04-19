@@ -147,6 +147,44 @@
         .gb-toggle-chip.active .chip-state { background: #22c55e; color: #000; box-shadow: 0 0 8px #22c55e; }
         .gb-toggle-chip:hover { border-color: #555; }
         .gb-toggle-chip.active:hover { border-color: #4ade80; }
+
+        #gb-stat-container { transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease; overflow: visible; max-height: 800px; opacity: 1; margin-bottom: 5px; }
+        .stats-collapsed #gb-stat-container { max-height: 0; opacity: 0; margin-top: 0; margin-bottom: 0; overflow: hidden; pointer-events: none; }
+        #gb-telemetry-header { cursor: pointer; user-select: none; padding-bottom: 5px; transition: padding 0.3s; }
+        .stats-collapsed #gb-telemetry-header { padding-bottom: 0; }
+        
+        #gb-collapse-toggle { 
+            position: absolute; right: 0; bottom: 0; width: 10px; height: 10px; 
+            cursor: pointer; z-index: 10;
+        }
+        #gb-collapse-toggle::before, #gb-collapse-toggle::after {
+            content: ''; position: absolute; width: 0; height: 0; border-style: solid;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Top-Left part (◤) - Shrinks on collapse */
+        #gb-collapse-toggle::after {
+            bottom: 0; right: 0;
+            border-width: 8px 8px 0 0;
+            border-color: ${isConfigReady() ? '#22c55e' : '#f59e0b'} transparent transparent transparent;
+            transform-origin: bottom right;
+            opacity: 0.8;
+        }
+        /* Bottom-Right part (◢) - Stays/Grows at corner */
+        #gb-collapse-toggle::before {
+            bottom: 0; right: 0;
+            border-width: 0 0 8px 8px;
+            border-color: transparent transparent ${isConfigReady() ? '#22c55e' : '#f59e0b'} transparent;
+            transform-origin: bottom right;
+            opacity: 0.8;
+        }
+        
+        .stats-collapsed #gb-collapse-toggle::after { transform: scale(0); opacity: 0; }
+        .stats-collapsed #gb-collapse-toggle::before { transform: scale(1); opacity: 1; }
+        
+        .gb-telemetry { position: relative; padding: 10px 12px; transition: padding 0.3s; }
+        .gb-telemetry::before { content: ""; position: absolute; left: 0; top: 0; width: 4px; height: 100%; border-radius: 2px 0 0 2px; }
+        .stats-collapsed .gb-telemetry { padding-top: 4px; padding-bottom: 4px; }
+        .stats-collapsed .gb-telemetry::before { height: 100%; }
     `;
 
     function initUI() {
@@ -170,12 +208,17 @@
                             <span class="chip-state">${CONFIG.isPilotEnabled ? 'ON' : 'OFF'}</span>
                         </div>
                     </div>
-                    <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_BANK</span><span id="val-bank" class="gb-stat-value">0</span></div>
-                    <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_HAND</span><span id="val-hand" class="gb-stat-value">0</span></div>
-                    <div class="gb-stat-row"><span class="gb-stat-label">FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
-                    <div class="gb-stat-row"><span class="gb-stat-label">RANK [ W / T / E ]</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
+                    <div id="gb-stat-container">
+                        <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_BANK</span><span id="val-bank" class="gb-stat-value">0</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_HAND</span><span id="val-hand" class="gb-stat-value">0</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label">LOC_SECTOR</span><span id="val-sector" class="gb-stat-value">UNKNOWN</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label">MEGA_PROXIMITY</span><span id="val-mega" class="gb-stat-value">INF</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label">FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label">RANK [ W / T / E ]</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
+                    </div>
+                    <div id="gb-collapse-toggle"></div>
                 </div>
-                <div class="gb-scroll-area">
+                <div class="gb-scroll-area" id="gb-settings-scroll">
                     <span class="gb-label">Access Email</span>
                     <input type="text" id="cfg-email" class="gb-input" placeholder="contact@hearsilent.app" value="${CONFIG.email}">
                     
@@ -277,6 +320,38 @@
             const content = format === 'json' ? JSON.stringify({stats:h, leaderboard:l}, null, 2) : "Timestamp,Bank,OnHand,Fuel,Rank_W,Rank_T,Rank_E\n" + h.map(x=>`"${x.t}",${x.b},${x.h},"${x.f}","${x.rw||'N/A'}","${x.rt||'N/A'}","${x.re||'N/A'}"`).join("\n");
             const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type: format==='json'?'application/json':'text/csv' })); a.download = `gb_report.${format}`; a.click();
         };
+
+        // Toggle Expand/Collapse Telemetry
+        const telemetryBlock = panel.querySelector('.gb-telemetry');
+        const header = panel.querySelector('#gb-telemetry-header');
+        const toggleBtn = panel.querySelector('#gb-collapse-toggle');
+        const scrollArea = panel.querySelector('#gb-settings-scroll');
+
+        const toggleExpanded = () => {
+            telemetryBlock.classList.toggle('stats-collapsed');
+            window.manualTelemetryOverride = telemetryBlock.classList.contains('stats-collapsed') ? 'closed' : 'open';
+        };
+
+        if (header) header.onclick = toggleExpanded;
+        if (toggleBtn) toggleBtn.onclick = toggleExpanded;
+
+        if (scrollArea && telemetryBlock) {
+            scrollArea.addEventListener('scroll', () => {
+                // Restore auto-logic if user scrolls deep enough
+                if (scrollArea.scrollTop > 80) window.manualTelemetryOverride = null;
+
+                if (scrollArea.scrollTop > 30 && !telemetryBlock.classList.contains('stats-collapsed') && window.manualTelemetryOverride !== 'open') {
+                    telemetryBlock.classList.add('stats-collapsed');
+                }
+            });
+
+            scrollArea.addEventListener('wheel', (e) => {
+                if (scrollArea.scrollTop === 0 && e.deltaY < -2 && telemetryBlock.classList.contains('stats-collapsed')) {
+                    telemetryBlock.classList.remove('stats-collapsed');
+                    window.manualTelemetryOverride = 'open';
+                }
+            });
+        }
     }
 
     // 4. Improved State Synchronization (Keep as is)
@@ -347,7 +422,6 @@
         window.charSelected = false;
         if (window.loginGraceTimer && Date.now() < window.loginGraceTimer) return false;
 
-        // 【修正】使用 border="bracket" 精準定位狀態徽章，避免找不到 span 的問題
         const statusBadgeEl = [...document.querySelectorAll('div, span')].find(el => {
             const p = getPropsFromFiber(el, ['border', 'variant']);
             return p?.border === 'bracket';
@@ -355,7 +429,6 @@
 
         const badgeProps = statusBadgeEl ? getPropsFromFiber(statusBadgeEl, ['variant']) : null;
 
-        // 如果 variant 為 'success' 則代表 Active (工作中)
         const isWorking = badgeProps?.variant === 'success';
         const isIdle = !isWorking;
 
@@ -383,14 +456,12 @@
                 if (p?.label === 'Bank') bank = p.balance; if (p?.label === 'On Hand') onHand = p.balance;
             });
 
-            // Improved Fuel Capture Logic
             const fuelBadgeEl = document.getElementById('ship-fuel')?.querySelector('div, span');
             if (fuelBadgeEl) {
                 const p = getPropsFromFiber(fuelBadgeEl, ['value', 'maxValue']);
                 if (p) fuel = `${p.value}/${p.maxValue}`;
             }
 
-            // Fallback to text search if ID fails
             if (fuel === "--/--") {
                 const fuelTitle = [...document.querySelectorAll('span')].find(el => el.innerText === 'Fuel');
                 if (fuelTitle) {
@@ -402,16 +473,48 @@
             const bEl = document.getElementById('val-bank'); if (bEl) bEl.innerText = bank;
             const hEl = document.getElementById('val-hand'); if (hEl) hEl.innerText = onHand;
             const fEl = document.getElementById('val-fuel'); 
+            
+            let currentSector = null;
+            // 1. Regex-based aggressive DOM search
+            const sectorNodes = [...document.querySelectorAll('div, span, button')].filter(el => /Sector\s*\d+/i.test(el.innerText));
+            for (const n of sectorNodes) {
+                const m = n.innerText.match(/Sector\s*(\d+)/i);
+                if (m) { currentSector = parseInt(m[1]); break; }
+            }
+            // 2. Exact match fallback
+            if (currentSector === null) {
+                const labels = [...document.querySelectorAll('div, span')].filter(el => el.innerText.trim().toUpperCase() === 'SECTOR');
+                for (const l of labels) {
+                    const val = l.parentElement?.innerText.match(/\d+/) || l.querySelector('span')?.innerText.match(/\d+/);
+                    if (val) { currentSector = parseInt(val[0]); break; }
+                }
+            }
+            // 3. Fiber fallback (safe for 0)
+            if (currentSector === null) {
+                const canvas = document.querySelector('canvas');
+                if (canvas) {
+                    const p = getPropsFromFiber(canvas, ['current_sector_id']);
+                    if (p && p.current_sector_id !== undefined) currentSector = p.current_sector_id;
+                }
+            }
+            const sEl = document.getElementById('val-sector'); if (sEl) sEl.innerText = currentSector !== null ? currentSector : 'UNKNOWN';
+
+            // Immediate Proximity Update
+            if (currentSector !== null) {
+                updateMegaPortDistance(currentSector);
+                const mEl = document.getElementById('val-mega'); 
+                if (mEl && window.lastKnownDistToMega !== undefined) {
+                    mEl.innerText = `${window.lastKnownDistToMega} HOPS`;
+                }
+            }
+
             if (fEl) {
                 fEl.innerText = fuel;
                 const [fCur, fTot] = fuel.split('/').map(n => parseInt(n.replace(/,/g,'')));
                 if (!isNaN(fCur) && !isNaN(fTot)) {
                     const fPct = (fCur / fTot) * 100;
                     fEl.style.color = fPct < 30 ? '#ff4444' : (fPct < 70 ? '#f59e0b' : '#22c55e');
-                    fEl.style.textShadow = `0 0 8px \${fEl.style.color}44`;
-                } else {
-                    fEl.style.color = '';
-                    fEl.style.textShadow = '';
+                    fEl.style.textShadow = `0 0 8px ${fEl.style.color}44`;
                 }
             }
 
@@ -431,7 +534,7 @@
                 headerEl.title = `LOCAL_SENSE :: ${new Date().toLocaleTimeString()}\n${syncMsg}`;
             }
 
-            return { bank, onHand, fuel };
+            return { bank, onHand, fuel, currentSector };
         } catch (e) { return null; }
     }
 
@@ -459,41 +562,65 @@
         } catch (e) { }
     }
 
+    async function updateMegaPortDistance(sectorId) {
+        if (window.isUpdatingMegaDist) return;
+        window.isUpdatingMegaDist = true;
+        
+        try {
+            const now = Date.now();
+            if (!window.megaPortsMap || (now - (window.lastMegaFetch || 0) > 3600000)) {
+                window.megaPortsMap = [0, 42, 101];
+                window.lastMegaFetch = now;
+            }
+
+            let minDist = 999;
+            for (const megaId of window.megaPortsMap) {
+                if (megaId === sectorId) {
+                    minDist = 0;
+                    break;
+                }
+                const d = Math.abs(megaId - sectorId) % 20;
+                if (d < minDist) minDist = d;
+            }
+            
+            window.lastKnownDistToMega = minDist;
+            // Update UI immediately
+            const mEl = document.getElementById('val-mega'); 
+            if (mEl) mEl.innerText = `${minDist} HOPS`;
+        } finally {
+            window.isUpdatingMegaDist = false;
+        }
+    }
+
     async function reportToWebhook() {
         if (!CONFIG.webhookUrl || !CONFIG.webhookUrl.startsWith('http')) return;
         
         try {
-            const stats = refreshLiveData();
-            if (!stats) return;
-            let rankWealth = "N/A";
-            let rankTrading = "N/A";
-            let rankExploration = "N/A";
-            let totalWealth = "0";
+            const data = refreshLiveData();
+            if (!data) return;
+            
+            let distToMega = (window.lastKnownDistToMega !== undefined) ? window.lastKnownDistToMega : null;
+            const mEl = document.getElementById('val-mega'); if (mEl) mEl.innerText = distToMega !== null ? `${distToMega} HOPS` : 'SEARCHING...';
+
+            let rankWealth = "N/A", rankTrading = "N/A", rankExploration = "N/A", totalWealth = "0";
 
             try {
                 const lbResponse = await fetch('https://api.gradient-bang.com/functions/v1/leaderboard_resources');
                 const lbData = await lbResponse.json();
                 if (lbData.success) {
                     const findR = (arr, field) => {
-                        const list = (arr || [])
-                            .filter(p => p.player_type === 'human')
-                            .sort((a, b) => (b[field] || 0) - (a[field] || 0));
+                        const list = (arr || []).filter(p => p.player_type === 'human').sort((a, b) => (b[field] || 0) - (a[field] || 0));
                         const idx = list.findIndex(p => p.player_name?.trim().toUpperCase() === CONFIG.charName.trim().toUpperCase());
                         return idx !== -1 ? `#${idx + 1}` : "N/A";
                     };
-                    
                     rankWealth = findR(lbData.wealth, 'total_wealth');
                     rankTrading = findR(lbData.trading, 'total_trades');
                     rankExploration = findR(lbData.exploration, 'sectors_visited');
-
                     const myWealth = lbData.wealth?.find(p => p.player_name?.trim().toUpperCase() === CONFIG.charName.trim().toUpperCase());
                     if (myWealth) totalWealth = myWealth.total_wealth.toLocaleString();
-
                     window.lastRanks = { w: rankWealth, t: rankTrading, e: rankExploration };
                 }
-            } catch (lbErr) {
-                log('Leaderboard fetch failed: ' + lbErr.message);
-            }
+            } catch (lbErr) { log('Leaderboard fetch failed: ' + lbErr.message); }
 
             const rEl = document.getElementById('val-ranks');
             if (rEl) rEl.innerText = `${rankWealth} / ${rankTrading} / ${rankExploration}`;
@@ -501,9 +628,11 @@
             const payload = {
                 charName: CONFIG.charName,
                 isPilotEnabled: CONFIG.isPilotEnabled ? 1 : 0,
-                bank: stats.bank,
-                onHand: stats.onHand,
-                fuel: stats.fuel,
+                bank: data.bank,
+                onHand: data.onHand,
+                fuel: data.fuel,
+                currentSector: data.currentSector,
+                distToMega,
                 rankWealth,
                 rankTrading,
                 rankExploration,
@@ -517,28 +646,28 @@
             });
 
             if (!response.ok) throw new Error(`HTTP_${response.status}`);
-
             window.lastWebhookError = null;
             log('Remote telemetry sync successful.');
         } catch (e) {
             window.lastWebhookError = e.message;
             log('Remote telemetry sync failed: ' + e.message);
         }
-        refreshLiveData(); // Immediate UI update
     }
 
     function schedule(ms) { clearTimeout(window.gbTimeout); window.gbTimeout = setTimeout(automate, ms); }
     const bootstrap = () => { 
         if (document.body) { 
-            initUI(); schedule(2000); setInterval(refreshLiveData, 5000); 
+            initUI(); schedule(2000); 
+            refreshLiveData(); // Immediate refresh
+            setInterval(refreshLiveData, 5000); 
             if (CONFIG.webhookUrl) {
+                setTimeout(reportToWebhook, 5000); // Early first sync
                 setInterval(reportToWebhook, CONFIG.webhookInterval || 60000);
             }
         } else { setTimeout(bootstrap, 500); } 
     };
     bootstrap();
 
-    // Simple Periodic Session Refresh
     setInterval(() => {
         if (isConfigReady()) {
             log('Periodic session refresh triggered.');
