@@ -830,12 +830,71 @@
                 if (!isNaN(cur) && !isNaN(tot)) fuelPct = (cur / tot) * 100;
             }
 
-            // Consumption Detection
+            // Static Siphon: Try to find direct consumption stats from React Props (Optimized via Source Code)
+            if (window.lastFuelPerStep === undefined || window.lastFuelPerStep === 0) {
+                const shipElements = [
+                    document.getElementById('ship-fuel')?.querySelector('div, span'),
+                    document.getElementById('ship-status'),
+                    document.querySelector('canvas'), // Scene usually has current ship data
+                    document.querySelector('div[role="button"]'), // Interactive cards
+                ];
+
+                const fields = ['turns_per_warp', 'turnsPerWarp', 'consumption', 'warp_cost'];
+                
+                for (const el of shipElements) {
+                    if (!el) continue;
+                    const props = getPropsFromFiber(el);
+                    if (!props) continue;
+                    
+                    // Recursive search in props (often nested in ship/data/info)
+                    const findInObj = (obj, targetFields, depth = 0) => {
+                        if (!obj || depth > 3) return null;
+                        for (const f of targetFields) {
+                            if (obj[f] !== undefined && !isNaN(obj[f]) && obj[f] > 0) return obj[f];
+                        }
+                        for (const key in obj) {
+                            if (typeof obj[key] === 'object') {
+                                const res = findInObj(obj[key], targetFields, depth + 1);
+                                if (res) return res;
+                            }
+                        }
+                        return null;
+                    };
+
+                    const staticVal = findInObj(props, fields);
+                    if (staticVal) {
+                        window.lastFuelPerStep = parseFloat(staticVal);
+                        localStorage.setItem('gb_last_fuel_per_step', window.lastFuelPerStep.toString());
+                        log(`System: Static fuel consumption detected: ${window.lastFuelPerStep}/HOP`);
+                        break;
+                    }
+                }
+                
+                // Atlas Hauler Special Fallback: If we see the name but can't find the prop
+                if (window.lastFuelPerStep === undefined) {
+                    const isAtlas = [...document.querySelectorAll('span, p')].some(el => el.innerText.includes('Atlas Hauler'));
+                    if (isAtlas) {
+                        window.lastFuelPerStep = 4;
+                        localStorage.setItem('gb_last_fuel_per_step', "4");
+                    }
+                }
+
+                // Global Fallback: Persistence
+                if (window.lastFuelPerStep === undefined) {
+                    const savedFC = localStorage.getItem('gb_last_fuel_per_step');
+                    if (savedFC) window.lastFuelPerStep = parseFloat(savedFC);
+                }
+            }
+
+            // Movement-based Calculation (The backup)
             if (window.lastKnownSector !== undefined && currentSector !== null && window.lastKnownSector !== currentSector) {
                 if (window.lastKnownFuel !== undefined && fuelCur < window.lastKnownFuel) {
                     const diff = window.lastKnownFuel - fuelCur;
                     const dist = Math.abs(currentSector - window.lastKnownSector);
-                    if (dist > 0) window.lastFuelPerStep = diff / dist;
+                    if (dist > 0) {
+                        window.lastFuelPerStep = diff / dist;
+                        localStorage.setItem('gb_last_fuel_per_step', window.lastFuelPerStep.toString());
+                    }
                 }
             }
             window.lastKnownSector = currentSector;
