@@ -25,6 +25,8 @@
         loginGraceMs: 30000,
         webhookUrl: '',
         webhookInterval: 60000,
+        protocolInterval: 60000,
+        skipPilotWhenWorking: true,
         isPilotEnabled: false
     };
 
@@ -432,6 +434,17 @@
                     
                     <span class="gb-label">Pilot Protocol</span>
                     <textarea id="cfg-cmd" class="gb-input" style="height: 105px; resize: none;">${CONFIG.pilotProtocol}</textarea>
+                    
+                    <span class="gb-label">Protocol Interval (Sec)</span>
+                    <input type="number" id="cfg-protocol-int" class="gb-input" value="${(CONFIG.protocolInterval || 60000) / 1000}">
+
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 15px;">
+                        <span class="gb-label" style="margin: 0;">Skip Protocol When Working</span>
+                        <div id="cfg-skip-working" class="gb-toggle-chip ${CONFIG.skipPilotWhenWorking ? 'active' : ''}">
+                            <span class="chip-label" style="font-size: 8px;">SKIP</span>
+                            <span class="chip-state">${CONFIG.skipPilotWhenWorking ? 'ON' : 'OFF'}</span>
+                        </div>
+                    </div>
 
                     <!-- Financial Bridge Section -->
                     <div id="gb-financial-bridge">
@@ -539,6 +552,13 @@
             log(`Auto-pilot ${newState ? 'enabled' : 'disabled'}.`);
             reportToWebhook();
         };
+        document.getElementById('cfg-skip-working').onclick = (e) => {
+            const chip = e.currentTarget;
+            const newState = !chip.classList.contains('active');
+            chip.classList.toggle('active', newState);
+            chip.querySelector('.chip-state').innerText = newState ? 'ON' : 'OFF';
+            log(`Skip when working: ${newState ? 'ON' : 'OFF'}`);
+        };
         document.getElementById('gb-save-btn').onclick = () => {
             saveConfig({
                 email: document.getElementById('cfg-email').value,
@@ -551,7 +571,9 @@
                 refreshInterval: parseInt(document.getElementById('cfg-refresh').value) * 60000,
                 loginGraceMs: parseInt(document.getElementById('cfg-grace').value) * 1000,
                 webhookUrl: document.getElementById('cfg-webhook').value,
-                webhookInterval: parseInt(document.getElementById('cfg-webhook-int').value) * 1000
+                webhookInterval: parseInt(document.getElementById('cfg-webhook-int').value) * 1000,
+                protocolInterval: parseInt(document.getElementById('cfg-protocol-int').value) * 1000,
+                skipPilotWhenWorking: document.getElementById('cfg-skip-working').classList.contains('active')
             });
             localStorage.removeItem('gb_ap_start_time');
             location.reload();
@@ -872,12 +894,14 @@
 
         if (!CONFIG.isPilotEnabled) return isWorking;
 
-        if (isIdle && !window.pilotStarted) {
-            log('STATUS: Idle / Inactive detected. Dispatching protocol...');
+        const shouldSkip = CONFIG.skipPilotWhenWorking && isWorking;
+
+        if (!shouldSkip && !window.pilotStarted) {
+            log(isIdle ? 'STATUS: Idle / Inactive detected. Dispatching protocol...' : 'STATUS: Dispatching protocol (SkipWhenWorking disabled)...');
             dispatchCommand(CONFIG.pilotProtocol);
             window.pilotStarted = true;
-            setTimeout(() => { window.pilotStarted = false; }, 30000);
-            return false;
+            setTimeout(() => { window.pilotStarted = false; }, CONFIG.protocolInterval || 60000);
+            return isWorking;
         }
         return isWorking;
     }
