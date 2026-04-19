@@ -389,6 +389,15 @@
     function initUI() {
         if (document.getElementById('gb-tactical-panel')) return;
         const styleEl = document.createElement('style'); styleEl.innerHTML = styles; document.head.appendChild(styleEl);
+        const accountFields = `
+                    <span class="gb-label">Access Email</span>
+                    <input type="text" id="cfg-email" class="gb-input" placeholder="contact@hearsilent.app" value="${CONFIG.email}">
+                    
+                    <span class="gb-label">Security Pass</span>
+                    <input type="password" id="cfg-pass" class="gb-input" value="${CONFIG.pass}">
+                    
+                    <span class="gb-label">Pilot Name</span>
+                    <input type="text" id="cfg-char" class="gb-input" placeholder="HearSilent" value="${CONFIG.charName}">`;
         const panel = document.createElement('div'); panel.id = 'gb-tactical-panel'; 
         panel.className = 'collapsed' + (CONFIG.isPilotEnabled ? '' : ' gb-off');
         panel.innerHTML = `
@@ -423,14 +432,7 @@
                     <div id="gb-collapse-toggle"></div>
                 </div>
                 <div class="gb-scroll-area" id="gb-settings-scroll">
-                    <span class="gb-label">Access Email</span>
-                    <input type="text" id="cfg-email" class="gb-input" placeholder="contact@hearsilent.app" value="${CONFIG.email}">
-                    
-                    <span class="gb-label">Security Pass</span>
-                    <input type="password" id="cfg-pass" class="gb-input" value="${CONFIG.pass}">
-                    
-                    <span class="gb-label">Pilot Name</span>
-                    <input type="text" id="cfg-char" class="gb-input" placeholder="HearSilent" value="${CONFIG.charName}">
+                    ${!isConfigReady() ? accountFields : ''}
                     
                     <span class="gb-label">Pilot Protocol</span>
                     <textarea id="cfg-cmd" class="gb-input" style="height: 105px; resize: none;">${CONFIG.pilotProtocol}</textarea>
@@ -496,6 +498,7 @@
                     
                     <span class="gb-label">Remote Sync Interval (Sec)</span>
                     <input type="number" id="cfg-webhook-int" class="gb-input" value="${(CONFIG.webhookInterval || 60000) / 1000}">
+                    ${isConfigReady() ? accountFields : ''}
                 </div>
                 
                 <button id="gb-save-btn" class="gb-btn" style="width:100%">UPDATE CONFIG & RESTART</button>
