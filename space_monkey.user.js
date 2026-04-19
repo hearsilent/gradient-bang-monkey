@@ -733,6 +733,13 @@
                 return;
             }
 
+            // 2. Auto Pilot Check
+            if (CONFIG.isPilotEnabled) {
+                alert(`⚠️ TACTICAL_ERROR: Auto Pilot must be OFF for banking operations.`);
+                log(`ERR: Banking blocked. Auto Pilot is active.`);
+                return;
+            }
+
             let amount = "";
             if (isAll) {
                 const sourceId = type === 'deposit' ? 'val-hand' : 'val-bank';
