@@ -17,15 +17,16 @@
         email: 'your_email',
         pass: 'your_password',
         charName: 'your_character_name',
-        farmCommand: "your_farm_command",
+        pilotCommand: "your_pilot_command",
         idleInterval: 120000,
         refreshInterval: 1800000,
         loginGraceMs: 30000,
         webhookUrl: '',
-        webhookInterval: 60000
+        webhookInterval: 60000,
+        isPilotEnabled: false
     };
 
-    let CONFIG = JSON.parse(localStorage.getItem('gb_tactical_config') || JSON.stringify(DEFAULT_CONFIG));
+    let CONFIG = { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem('gb_tactical_config') || '{}') };
 
     function saveConfig(newConfig) {
         CONFIG = { ...CONFIG, ...newConfig };
@@ -37,7 +38,7 @@
             CONFIG.email && CONFIG.email !== 'your_email' &&
             CONFIG.pass && CONFIG.pass !== 'your_password' &&
             CONFIG.charName && CONFIG.charName !== 'your_character_name' &&
-            CONFIG.farmCommand && CONFIG.farmCommand !== 'your_farm_command'
+            CONFIG.pilotCommand && CONFIG.pilotCommand !== 'your_pilot_command'
         );
     }
 
@@ -74,17 +75,20 @@
         .gb-header { border-bottom: 2px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; margin-bottom: 20px; padding-bottom: 8px; }
         .gb-header h2 { margin: 0; font-size: 15px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; letter-spacing: 1px; }
 
-        .gb-label { font-size: 10px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-transform: uppercase; margin-bottom: 6px; display: block; font-weight: 800; opacity: 0.9; margin-top: 14px; }
+        .gb-label { font-size: 10px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-transform: uppercase; margin-bottom: 6px; display: block; font-weight: 800; opacity: 0.9; margin-top: 14px; letter-spacing: 1px; }
         .gb-label:first-child { margin-top: 0; }
         
-        .gb-input { width: 100%; background: #000; border: 1px solid #222; color: #fff; padding: 10px; font-size: 12px; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; }
-        .gb-input:focus { border-color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; outline: none; }
+        .gb-input { width: 100%; background: #000; border: 1px solid #222; color: #fff; padding: 10px; font-size: 12px; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; border-radius: 2px; }
+        .gb-input:focus { border-color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; outline: none; box-shadow: 0 0 10px rgba(34, 197, 94, 0.1); }
         
-        .gb-telemetry { background: #050505; border: 1px solid #1a1a1a; padding: 15px; margin-bottom: 20px; position: relative; }
-        .gb-telemetry::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; opacity: 0.5; }
-        .gb-stat-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11px; border-bottom: 1px solid #111; padding-bottom: 4px; }
-        .gb-stat-label { color: #888; text-transform: uppercase; font-weight: bold; font-size: 9px; }
-        .gb-stat-value { color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-align: right; font-weight: 900; text-shadow: 0 0 8px rgba(34, 197, 94, 0.3); }
+        .gb-telemetry { background: #050505; border: 1px solid #1a1a1a; padding: 18px; margin-bottom: 20px; position: relative; border-radius: 4px; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
+        .gb-telemetry::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; box-shadow: 0 0 10px ${isConfigReady() ? '#22c55e' : '#f59e0b'}; opacity: 0.6; }
+        
+        .gb-stat-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px; padding-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.05); }
+        .gb-stat-row:last-child { border-bottom: none; }
+        .gb-stat-label { color: #777; text-transform: uppercase; font-weight: bold; font-size: 9px; letter-spacing: 0.5px; display: flex; align-items: center; }
+        .gb-stat-label::before { content: '::'; margin-right: 6px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; opacity: 0.5; }
+        .gb-stat-value { color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-align: right; font-weight: 900; text-shadow: 0 0 10px rgba(34, 197, 94, 0.4); font-family: 'Consolas', monospace; }
 
         .btn-group { display: flex; gap: 8px; margin-top: 15px; }
         .gb-btn { background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; color: #000; border: none; padding: 12px; font-weight: 950; text-transform: uppercase; cursor: pointer; flex: 1; font-size: 11px; transition: opacity 0.2s; }
@@ -114,6 +118,27 @@
             margin-top: -2px;
             pointer-events: none;
         }
+
+        .gb-toggle-chip {
+            display: flex;
+            align-items: center;
+            background: rgba(20,20,20,0.8);
+            border: 1px solid #333;
+            padding: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 9px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            margin-left: auto;
+        }
+        .gb-toggle-chip .chip-label { color: #666; padding: 0 8px; font-weight: 800; letter-spacing: 0.5px; }
+        .gb-toggle-chip .chip-state { background: #222; color: #555; padding: 3px 8px; border-radius: 2px; font-weight: 900; transition: all 0.3s; }
+        .gb-toggle-chip.active { border-color: #22c55e; box-shadow: 0 0 15px rgba(34, 197, 94, 0.15); }
+        .gb-toggle-chip.active .chip-label { color: #22c55e; text-shadow: 0 0 5px rgba(34, 197, 94, 0.5); }
+        .gb-toggle-chip.active .chip-state { background: #22c55e; color: #000; box-shadow: 0 0 8px #22c55e; }
+        .gb-toggle-chip:hover { border-color: #555; }
+        .gb-toggle-chip.active:hover { border-color: #4ade80; }
     `;
 
     function initUI() {
@@ -126,14 +151,20 @@
                     <h2>${isConfigReady() ? '>> SYSTEM READY :: 0xCD1BA' : '>> SETUP REQUIRED'}</h2>
                 </div>
                 <div class="gb-telemetry">
-                    <div id="gb-telemetry-header" style="display: flex; align-items: center; margin-bottom: 5px; cursor: help;" title="Awaiting first update...">
-                        <span class="gb-label" style="margin:0; color:${isConfigReady() ? '#22c55e' : '#f59e0b'}; font-size: 9px;">LIVE SENSOR TELEMETRY</span>
-                        <span id="gb-status-dot" class="gb-pulse-dot" style="color:${isConfigReady() ? '#22c55e' : '#f59e0b'};"></span>
+                    <div id="gb-telemetry-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; cursor: help;" title="Awaiting first update...">
+                        <div style="display: flex; align-items: center;">
+                            <span id="gb-status-dot" class="gb-pulse-dot" style="margin-left: 0; margin-right: 10px; color:${isConfigReady() ? '#22c55e' : '#f59e0b'};"></span>
+                            <span class="gb-label" style="margin:0; color:${isConfigReady() ? '#22c55e' : '#f59e0b'}; font-size: 10px; letter-spacing: 1.5px;">SYSTEM_SENSORS</span>
+                        </div>
+                        <div id="pilot-toggle-btn" class="gb-toggle-chip ${CONFIG.isPilotEnabled ? 'active' : ''}">
+                            <span class="chip-label">AUTO_PILOT</span>
+                            <span class="chip-state">${CONFIG.isPilotEnabled ? 'ON' : 'OFF'}</span>
+                        </div>
                     </div>
                     <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_BANK</span><span id="val-bank" class="gb-stat-value">0</span></div>
                     <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_HAND</span><span id="val-hand" class="gb-stat-value">0</span></div>
                     <div class="gb-stat-row"><span class="gb-stat-label">FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
-                    <div class="gb-stat-row"><span class="gb-stat-label">RANK_W / T / E</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
+                    <div class="gb-stat-row"><span class="gb-stat-label">RANK [ W / T / E ]</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
                 </div>
                 <div class="gb-scroll-area">
                     <span class="gb-label">Access Email</span>
@@ -146,7 +177,7 @@
                     <input type="text" id="cfg-char" class="gb-input" placeholder="HearSilent" value="${CONFIG.charName}">
                     
                     <span class="gb-label">Neural Command</span>
-                    <textarea id="cfg-cmd" class="gb-input" style="height: 80px; resize: none;">${CONFIG.farmCommand}</textarea>
+                    <textarea id="cfg-cmd" class="gb-input" style="height: 80px; resize: none;">${CONFIG.pilotCommand}</textarea>
                     
                     <div class="btn-group" style="margin-top: 5px;">
                         <div style="flex: 1;">
@@ -195,12 +226,31 @@
                 log('System logs purged successfully.');
             }
         };
+        document.getElementById('pilot-toggle-btn').onclick = (e) => {
+            e.stopPropagation();
+            const cmd = document.getElementById('cfg-cmd').value;
+            if (!cmd || cmd === 'your_pilot_command') {
+                const cmdInput = document.getElementById('cfg-cmd');
+                cmdInput.focus();
+                cmdInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                cmdInput.style.borderColor = '#ff4444';
+                setTimeout(() => { cmdInput.style.borderColor = ''; }, 2000);
+                log('PILOT_COMMAND not set. Please configure before enabling.');
+                return;
+            }
+            const newState = !CONFIG.isPilotEnabled;
+            saveConfig({ isPilotEnabled: newState });
+            const chip = e.currentTarget;
+            chip.classList.toggle('active', newState);
+            chip.querySelector('.chip-state').innerText = newState ? 'ON' : 'OFF';
+            log(`Auto-pilot ${newState ? 'enabled' : 'disabled'}.`);
+        };
         document.getElementById('gb-save-btn').onclick = () => {
             saveConfig({
                 email: document.getElementById('cfg-email').value,
                 pass: document.getElementById('cfg-pass').value,
                 charName: document.getElementById('cfg-char').value,
-                farmCommand: document.getElementById('cfg-cmd').value,
+                pilotCommand: document.getElementById('cfg-cmd').value,
                 idleInterval: parseInt(document.getElementById('cfg-idle').value) * 1000,
                 refreshInterval: parseInt(document.getElementById('cfg-refresh').value) * 60000,
                 loginGraceMs: parseInt(document.getElementById('cfg-grace').value) * 1000,
@@ -297,14 +347,16 @@
         const isWorking = badgeProps?.variant === 'success';
         const isIdle = !isWorking;
 
-        if (isIdle && !window.farmStarted) {
+        if (!CONFIG.isPilotEnabled) return isWorking;
+
+        if (isIdle && !window.pilotStarted) {
             log('STATUS: Idle / Inactive detected. Dispatching command...');
-            syncValue(chatInput, CONFIG.farmCommand);
+            syncValue(chatInput, CONFIG.pilotCommand);
             setTimeout(() => {
                 const btn = document.querySelector('input[placeholder="Enter command"]').closest('div').querySelector('button');
                 if (btn) btn.click();
-                window.farmStarted = true;
-                setTimeout(() => { window.farmStarted = false; }, 30000);
+                window.pilotStarted = true;
+                setTimeout(() => { window.pilotStarted = false; }, 30000);
             }, 1000);
             return false;
         }
