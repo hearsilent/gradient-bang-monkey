@@ -30,6 +30,14 @@ export default {
     // GET: Retrieve telemetry
     if (request.method === "GET") {
       const charName = url.searchParams.get("char");
+      const acceptHeader = request.headers.get("Accept") || "";
+
+      // Serve HTML Dashboard for browser requests to root
+      if (!charName && acceptHeader.includes("text/html")) {
+        return new Response(generateDashboardHTML(), {
+          headers: { ...corsHeaders, "Content-Type": "text/html" },
+        });
+      }
       
       if (!charName) {
         // Return latest status for ALL characters
@@ -95,3 +103,204 @@ export default {
     return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
   },
 };
+
+function generateDashboardHTML() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GB Telemetry Monitor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #050505;
+            color: #eee;
+            font-family: 'Consolas', 'Roboto Mono', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 1000px;
+        }
+        .header {
+            border-bottom: 2px solid #22c55e;
+            margin-bottom: 30px;
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+            color: #22c55e;
+            letter-spacing: 2px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: rgba(8, 8, 8, 0.95);
+            border: 1px solid #22c55e;
+            padding: 20px;
+            position: relative;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: #22c55e;
+            opacity: 0.8;
+        }
+        .char-name {
+            font-size: 16px;
+            font-weight: 900;
+            color: #22c55e;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .gb-label {
+            font-size: 10px;
+            color: #22c55e;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            display: block;
+            font-weight: 800;
+            opacity: 0.7;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            font-size: 12px;
+            border-bottom: 1px solid #1a1a1a;
+            padding-bottom: 6px;
+        }
+        .stat-label {
+            color: #888;
+            text-transform: uppercase;
+            font-weight: bold;
+            font-size: 10px;
+        }
+        .stat-value {
+            color: #22c55e;
+            font-weight: 900;
+            text-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+        }
+        .timestamp {
+            margin-top: 15px;
+            font-size: 9px;
+            color: #555;
+            text-align: right;
+        }
+        @keyframes breathe {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 8px #22c55e; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+        .pulse-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #22c55e;
+            border-radius: 50%;
+            animation: breathe 3s infinite ease-in-out;
+            vertical-align: middle;
+        }
+        #loading {
+            color: #22c55e;
+            margin-top: 50px;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>>> SYSTEM_MONITOR :: 0xCD1BA</h1>
+            <div style="font-size: 10px; color: #888;">
+                AUTO_REFRESH: 30S <span class="pulse-dot"></span>
+            </div>
+        </div>
+        <div id="grid" class="grid"></div>
+        <div id="loading">INITIALIZING SENSORS...</div>
+    </div>
+
+    <script>
+        async function fetchData() {
+            try {
+                const response = await fetch(window.location.href, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+                renderCards(data);
+                document.getElementById('loading').style.display = 'none';
+            } catch (error) {
+                console.error('Fetch error:', error);
+                document.getElementById('loading').innerText = 'ERROR: SENSOR_LINK_LOST';
+            }
+        }
+
+        function renderCards(data) {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            
+            const sortedChars = Object.keys(data).sort();
+            
+            if (sortedChars.length === 0) {
+                grid.innerHTML = '<div style="color: #666; font-size: 12px;">NO DATA DETECTED IN DATABASE</div>';
+                return;
+            }
+
+            sortedChars.forEach(name => {
+                const stats = data[name];
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                const lastSeen = new Date(stats.timestamp).toLocaleString();
+                
+                card.innerHTML = \`
+                    <div class="char-name">
+                        \${name}
+                        <span style="font-size: 8px; opacity: 0.5;">ONLINE</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">CREDITS_BANK</span>
+                        <span class="stat-value">\${stats.bank}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">CREDITS_HAND</span>
+                        <span class="stat-value">\${stats.onHand}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">FUEL_CAPACITY</span>
+                        <span class="stat-value">\${stats.fuel}</span>
+                    </div>
+                    <div class="timestamp">LAST_SYNC: \${lastSeen}</div>
+                \`;
+                grid.appendChild(card);
+            });
+        }
+
+        fetchData();
+        setInterval(fetchData, 30000);
+    </script>
+</body>
+</html>`;
+}
+
