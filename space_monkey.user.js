@@ -64,19 +64,54 @@
 
     // 3. UI Implementation
     const styles = `
-        #gb-tactical-panel { position: fixed; left: 0; top: 50%; transform: translateY(-50%); z-index: 99999; display: flex; align-items: flex-start; font-family: 'Consolas', monospace; transition: transform 0.4s; }
-        #gb-tactical-panel.collapsed { transform: translateY(-50%) translateX(-320px); }
-        #gb-content { width: 320px; background: rgba(5,5,5,0.95); border: 2px solid ${isConfigReady() ? '#22c55e' : '#ff9900'}; border-left: none; color: #fff; padding: 20px; backdrop-filter: blur(8px); }
-        #gb-toggle { background: ${isConfigReady() ? '#22c55e' : '#ff9900'}; color: #000; padding: 20px 6px; cursor: pointer; writing-mode: vertical-lr; text-transform: uppercase; font-size: 11px; font-weight: 950; }
-        .gb-label { font-size: 10px; color: ${isConfigReady() ? '#22c55e' : '#ff9900'}; text-transform: uppercase; margin-bottom: 4px; display: block; font-weight: bold; margin-top: 10px; }
+        #gb-tactical-panel { position: fixed; left: 0; top: 48px; z-index: 99999; display: flex; align-items: flex-start; font-family: 'Consolas', 'Roboto Mono', monospace; transition: transform 0.4s; }
+        #gb-tactical-panel.collapsed { transform: translateX(-320px); }
+        #gb-content { width: 320px; background: rgba(8,8,8,0.98); border: 1px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; border-left: none; color: #eee; padding: 20px; backdrop-filter: blur(12px); box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
+        #gb-toggle { background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; color: #000; padding: 24px 8px; cursor: pointer; writing-mode: vertical-lr; text-transform: uppercase; font-size: 10px; font-weight: 900; letter-spacing: 1px; border-radius: 0 4px 4px 0; }
+        
+        .gb-header { border-bottom: 2px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; margin-bottom: 20px; padding-bottom: 8px; }
+        .gb-header h2 { margin: 0; font-size: 15px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; letter-spacing: 1px; }
+
+        .gb-label { font-size: 10px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-transform: uppercase; margin-bottom: 6px; display: block; font-weight: 800; opacity: 0.9; margin-top: 14px; }
         .gb-label:first-child { margin-top: 0; }
-        .gb-input { width: 100%; background: #000; border: 1px solid #333; color: #fff; padding: 8px; font-size: 12px; box-sizing: border-box; }
-        .btn-group { display: flex; gap: 5px; margin-top: 10px; }
-        .gb-btn { background: ${isConfigReady() ? '#22c55e' : '#ff9900'}; color: #000; border: none; padding: 10px; font-weight: 900; text-transform: uppercase; cursor: pointer; flex: 1; font-size: 10px; }
-        .gb-btn-sec { background: #111; color: #fff; border: 1px solid #555; }
-        .gb-btn-danger { background: #111; color: #ef4444; border: 1px solid #ef4444; margin-top: 10px; }
-        .gb-row { display: flex; gap: 10px; margin-top: 10px; }
-        .gb-col { flex: 1; }
+        
+        .gb-input { width: 100%; background: #000; border: 1px solid #222; color: #fff; padding: 10px; font-size: 12px; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; }
+        .gb-input:focus { border-color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; outline: none; }
+        
+        .gb-telemetry { background: #050505; border: 1px solid #1a1a1a; padding: 15px; margin-bottom: 20px; position: relative; }
+        .gb-telemetry::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; opacity: 0.5; }
+        .gb-stat-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11px; border-bottom: 1px solid #111; padding-bottom: 4px; }
+        .gb-stat-label { color: #888; text-transform: uppercase; font-weight: bold; font-size: 9px; }
+        .gb-stat-value { color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-align: right; font-weight: 900; text-shadow: 0 0 8px rgba(34, 197, 94, 0.3); }
+
+        .btn-group { display: flex; gap: 8px; margin-top: 15px; }
+        .gb-btn { background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; color: #000; border: none; padding: 12px; font-weight: 950; text-transform: uppercase; cursor: pointer; flex: 1; font-size: 11px; transition: opacity 0.2s; }
+        .gb-btn:hover { opacity: 0.85; }
+        .gb-btn-sec { background: transparent; color: #ccc; border: 1px solid #333; }
+        .gb-btn-sec:hover { border-color: #666; color: #fff; }
+        .gb-btn-danger { background: transparent; color: #ff4444; border: 1px solid #441111; margin-top: 15px; }
+        .gb-btn-danger:hover { background: #441111; }
+
+        .gb-scroll-area { max-height: 350px; overflow-y: auto; padding-right: 0; margin-bottom: 20px; scrollbar-width: none; -ms-overflow-style: none; }
+        .gb-scroll-area::-webkit-scrollbar { display: none; }
+
+        @keyframes breathe {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.4); opacity: 1; box-shadow: 0 0 8px currentColor; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+        .gb-pulse-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: currentColor;
+            border-radius: 50%;
+            margin-left: 8px;
+            vertical-align: middle;
+            animation: breathe 3s infinite ease-in-out;
+            margin-top: -2px;
+            pointer-events: none;
+        }
     `;
 
     function initUI() {
@@ -85,33 +120,53 @@
         const panel = document.createElement('div'); panel.id = 'gb-tactical-panel'; panel.className = 'collapsed';
         panel.innerHTML = `
             <div id="gb-content">
-                <div style="border-bottom: 2px solid ${isConfigReady() ? '#22c55e' : '#ff9900'}; margin-bottom: 15px; padding-bottom: 5px;">
-                    <h2 style="margin:0; font-size:16px; color:${isConfigReady() ? '#22c55e' : '#ff9900'}">${isConfigReady() ? '>> SYSTEM READY :: 0xCD1BA' : '>> SETUP REQUIRED'}</h2>
+                <div class="gb-header">
+                    <h2>${isConfigReady() ? '>> SYSTEM READY :: 0xCD1BA' : '>> SETUP REQUIRED'}</h2>
                 </div>
-                <div style="margin-bottom: 15px; height: 350px; overflow-y: auto; padding-right: 5px;">
-                    <span class="gb-label">Access Email</span><input type="text" id="cfg-email" class="gb-input" placeholder="email@example.com" value="${CONFIG.email}">
-                    <span class="gb-label">Security Pass</span><input type="password" id="cfg-pass" class="gb-input" value="${CONFIG.pass}">
-                    <span class="gb-label">Pilot Name</span><input type="text" id="cfg-char" class="gb-input" placeholder="Pilot-01" value="${CONFIG.charName}">
-                    <span class="gb-label">Neural Command</span><textarea id="cfg-cmd" class="gb-input" style="height: 60px; resize: none;">${CONFIG.farmCommand}</textarea>
+                <div class="gb-telemetry">
+                    <div id="gb-telemetry-header" style="display: flex; align-items: center; margin-bottom: 5px; cursor: help;" title="Awaiting first update...">
+                        <span class="gb-label" style="margin:0; color:${isConfigReady() ? '#22c55e' : '#f59e0b'}; font-size: 9px;">LIVE SENSOR TELEMETRY</span>
+                        <span id="gb-status-dot" class="gb-pulse-dot" style="color:${isConfigReady() ? '#22c55e' : '#f59e0b'};"></span>
+                    </div>
+                    <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_BANK</span><span id="val-bank" class="gb-stat-value">0</span></div>
+                    <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_HAND</span><span id="val-hand" class="gb-stat-value">0</span></div>
+                    <div class="gb-stat-row"><span class="gb-stat-label">FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
+                </div>
+                <div class="gb-scroll-area">
+                    <span class="gb-label">Access Email</span>
+                    <input type="text" id="cfg-email" class="gb-input" placeholder="contact@hearsilent.app" value="${CONFIG.email}">
                     
-                    <div class="gb-row">
-                        <div class="gb-col">
+                    <span class="gb-label">Security Pass</span>
+                    <input type="password" id="cfg-pass" class="gb-input" value="${CONFIG.pass}">
+                    
+                    <span class="gb-label">Pilot Name</span>
+                    <input type="text" id="cfg-char" class="gb-input" placeholder="HearSilent" value="${CONFIG.charName}">
+                    
+                    <span class="gb-label">Neural Command</span>
+                    <textarea id="cfg-cmd" class="gb-input" style="height: 80px; resize: none;">${CONFIG.farmCommand}</textarea>
+                    
+                    <div class="btn-group" style="margin-top: 5px;">
+                        <div style="flex: 1;">
                             <span class="gb-label">Idle Check (Sec)</span>
                             <input type="number" id="cfg-idle" class="gb-input" value="${CONFIG.idleInterval / 1000}">
                         </div>
-                        <div class="gb-col">
+                        <div style="flex: 1;">
                             <span class="gb-label">Auto Refresh (Min)</span>
                             <input type="number" id="cfg-refresh" class="gb-input" value="${CONFIG.refreshInterval / 60000}">
                         </div>
                     </div>
+                    
                     <span class="gb-label">Login Grace (Sec)</span>
                     <input type="number" id="cfg-grace" class="gb-input" value="${CONFIG.loginGraceMs / 1000}">
                 </div>
-                <button id="gb-save-btn" class="gb-btn" style="width:100%; font-size: 12px; margin-bottom:10px;">Update Config & Restart</button>
+                
+                <button id="gb-save-btn" class="gb-btn" style="width:100%">UPDATE CONFIG & RESTART</button>
+                
                 <div class="btn-group">
                     <button onclick="window.downloadLogs('json')" class="gb-btn gb-btn-sec">EXPORT JSON</button>
                     <button onclick="window.downloadLogs('csv')" class="gb-btn gb-btn-sec">EXPORT CSV</button>
                 </div>
+                
                 <button id="clear-logs" class="gb-btn gb-btn-danger" style="width:100%">WIPE ALL RECORDS (${getLogCount()})</button>
             </div>
             <div id="gb-toggle">>> TACTICAL_HUD :: 0xCD1BA</div>
@@ -233,24 +288,55 @@
         return isWorking;
     }
 
-    function captureStats() {
+    function refreshLiveData() {
         try {
             let bank = "0", onHand = "0", fuel = "--/--";
             document.querySelectorAll('div[data-tutorial="credits"]').forEach(el => {
                 const p = getPropsFromFiber(el, ['balance', 'label']);
                 if (p?.label === 'Bank') bank = p.balance; if (p?.label === 'On Hand') onHand = p.balance;
             });
-            const fuelTitle = [...document.querySelectorAll('span')].find(el => el.innerText === 'Fuel');
-            if (fuelTitle) { const p = getPropsFromFiber(fuelTitle, ['value', 'maxValue']); if (p) fuel = `${p.value}/${p.maxValue}`; }
+
+            // Improved Fuel Capture Logic
+            const fuelBadgeEl = document.getElementById('ship-fuel')?.querySelector('div, span');
+            if (fuelBadgeEl) {
+                const p = getPropsFromFiber(fuelBadgeEl, ['value', 'maxValue']);
+                if (p) fuel = `${p.value}/${p.maxValue}`;
+            }
+
+            // Fallback to text search if ID fails
+            if (fuel === "--/--") {
+                const fuelTitle = [...document.querySelectorAll('span')].find(el => el.innerText === 'Fuel');
+                if (fuelTitle) {
+                    const p = getPropsFromFiber(fuelTitle, ['value', 'maxValue']);
+                    if (p) fuel = `${p.value}/${p.maxValue}`;
+                }
+            }
+            
+            const bEl = document.getElementById('val-bank'); if (bEl) bEl.innerText = bank;
+            const hEl = document.getElementById('val-hand'); if (hEl) hEl.innerText = onHand;
+            const fEl = document.getElementById('val-fuel'); if (fEl) fEl.innerText = fuel;
+
+            const dotEl = document.getElementById('gb-status-dot');
+            const headerEl = document.getElementById('gb-telemetry-header');
+            if (headerEl) headerEl.title = `LAST_SYNC :: ${new Date().toLocaleTimeString()}`;
+
+            return { bank, onHand, fuel };
+        } catch (e) { return null; }
+    }
+
+    function captureStats() {
+        try {
+            const stats = refreshLiveData();
+            if (!stats) return;
             let history = JSON.parse(localStorage.getItem('gb_history') || '[]');
-            history.push({ t: new Date().toLocaleString(), b: bank, h: onHand, f: fuel });
+            history.push({ t: new Date().toLocaleString(), b: stats.bank, h: stats.onHand, f: stats.fuel });
             if (history.length > 2000) history.shift();
             localStorage.setItem('gb_history', JSON.stringify(history));
         } catch (e) { }
     }
 
     function schedule(ms) { clearTimeout(window.gbTimeout); window.gbTimeout = setTimeout(automate, ms); }
-    const bootstrap = () => { if (document.body) { initUI(); schedule(2000); } else { setTimeout(bootstrap, 500); } };
+    const bootstrap = () => { if (document.body) { initUI(); schedule(2000); setInterval(refreshLiveData, 5000); } else { setTimeout(bootstrap, 500); } };
     bootstrap();
 
     setInterval(async () => {
