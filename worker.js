@@ -32,6 +32,7 @@ export default {
         nearestMegaId INTEGER,
         fuelThreshold INTEGER DEFAULT 40,
         isPilotEnabled INTEGER DEFAULT 0,
+        apUptime INTEGER DEFAULT 0,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `).run();
@@ -49,6 +50,7 @@ export default {
     await migrate("ALTER TABLE telemetry ADD COLUMN nearestMegaId INTEGER");
     await migrate("ALTER TABLE telemetry ADD COLUMN fuelThreshold INTEGER DEFAULT 40");
     await migrate("ALTER TABLE telemetry ADD COLUMN isPilotEnabled INTEGER DEFAULT 0");
+    await migrate("ALTER TABLE telemetry ADD COLUMN apUptime INTEGER DEFAULT 0");
 
     // GET: Retrieve telemetry
     if (request.method === "GET") {
@@ -89,6 +91,7 @@ export default {
             nearestMegaId: row.nearestMegaId,
             fuelThreshold: row.fuelThreshold,
             isPilotEnabled: row.isPilotEnabled,
+            apUptime: row.apUptime,
             timestamp: row.timestamp
           };
         });
@@ -99,18 +102,13 @@ export default {
       }
 
       // Return history for specific character
-      const { results } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, isPilotEnabled, timestamp 
-        FROM telemetry 
-    `).all(); // Note: simplified for brevity, following existing pattern in the file if needed.
-    // Actually, following lines 96-102:
-    const { results: historyResults } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, timestamp 
+      const { results: historyResults } = await env.gb_banana.prepare(`
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, apUptime, timestamp 
         FROM telemetry 
         WHERE charName = ? 
         ORDER BY timestamp DESC 
         LIMIT 50
-      `).bind(charName).all();
+      `).bind(charName ?? null).all();
 
       return new Response(JSON.stringify(historyResults), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -121,15 +119,31 @@ export default {
     if (request.method === "POST") {
       try {
         const data = await request.json();
-        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, timestamp } = data;
+        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, apUptime, timestamp } = data;
 
         if (!charName) throw new Error("Missing charName");
 
-        // Insert new record
+        // Insert new record with absolute safety against 'undefined'
         await env.gb_banana.prepare(`
-          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold || 40, isPilotEnabled || 0, timestamp || new Date().toISOString()).run();
+          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, apUptime, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          charName ?? null, 
+          bank ?? null, 
+          onHand ?? null, 
+          fuel ?? null, 
+          rankWealth ?? null, 
+          rankTrading ?? null, 
+          rankExploration ?? null, 
+          totalWealth ?? null, 
+          currentSector ?? null, 
+          distToMega ?? null, 
+          nearestMegaId ?? null, 
+          fuelThreshold ?? 40, 
+          isPilotEnabled ?? 0, 
+          apUptime ?? 0, 
+          timestamp ?? new Date().toISOString()
+        ).run();
           
         return new Response("OK", { headers: corsHeaders });
       } catch (err) {
@@ -515,17 +529,32 @@ function generateDashboardHTML() {
 
         async function fetchData() {
             try {
-                const response = await fetch(window.location.href, {
+                const url = new URL(window.location.href);
+                url.searchParams.set('t', Date.now());
+                const response = await fetch(url.toString(), {
                     headers: { 'Accept': 'application/json' }
                 });
                 const data = await response.json();
                 renderCards(data, previousData);
+                window.latestTelemetry = data;
                 previousData = data;
                 document.getElementById('loading').style.display = 'none';
             } catch (error) {
                 console.error('Fetch error:', error);
                 document.getElementById('loading').innerText = 'ERROR: SENSOR_LINK_LOST';
             }
+        }
+
+        function formatUptime(seconds) {
+            if (!seconds || seconds <= 0) return "0s";
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            let res = "";
+            if (h > 0) res += h + "h ";
+            if (m > 0 || h > 0) res += m + "m ";
+            res += s + "s";
+            return res;
         }
 
         function getRankStyle(rank) {
@@ -636,7 +665,11 @@ function generateDashboardHTML() {
                         <div style="position: absolute; left: ' + (stats.fuelThreshold || 40) + '%; top: -2px; bottom: -2px; width: 1px; background: #ff4444; z-index: 10; box-shadow: 0 0 5px rgba(255, 68, 68, 0.4);"></div>\
                         <div style="position: absolute; left: ' + (stats.fuelThreshold || 40) + '%; top: 9px; transform: translateX(-50%); font-size: 7px; color: #ff4444; font-weight: 800; white-space: nowrap; letter-spacing: 0.5px; text-shadow: 0 0 5px rgba(255, 68, 68, 0.3);">LIMIT: ' + (stats.fuelThreshold || 40) + '%</div>\
                     </div>\
-                    <div class="stat-row" style="margin-top: 15px;">\
+                    <div class="stat-row" style="margin-top: 25px;">\
+                        <span class="stat-label">AUTO_PILOT_UPTIME</span>\
+                        <span class="stat-value" style="color:' + (isPilotActive ? '#22c55e' : '#666') + '" id="uptime-val-' + name + '">' + (isPilotActive ? formatUptime(stats.apUptime) : 'OFF') + '</span>\
+                    </div>\
+                    <div class="stat-row">\
                         <span class="stat-label">TOTAL_WEALTH</span>\
                         <span class="stat-value" style="color:#22c55e">' + (stats.totalWealth || '0') + '</span>\
                     </div>\
@@ -691,6 +724,24 @@ function generateDashboardHTML() {
 
         fetchData();
         setInterval(updateTicker, 1000);
+        
+        // Live Uptime Ticker
+        setInterval(() => {
+            if (!window.latestTelemetry) return;
+            const now = Date.now();
+            Object.keys(window.latestTelemetry).forEach(name => {
+                const stats = window.latestTelemetry[name];
+                if (stats.isPilotEnabled == 1) {
+                    const ts = stats.timestamp;
+                    const syncTime = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z').getTime();
+                    const elapsed = Math.floor((now - syncTime) / 1000);
+                    const total = (stats.apUptime || 0) + Math.max(0, elapsed);
+                    const el = document.getElementById('uptime-val-' + name);
+                    if (el) el.innerText = formatUptime(total);
+                }
+            });
+        }, 1000);
+
         scheduleNextGlitch();
     </script>
 </body>

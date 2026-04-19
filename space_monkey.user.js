@@ -35,6 +35,9 @@
         localStorage.setItem('gb_tactical_config', JSON.stringify(CONFIG));
     }
 
+    // Always reset uptime on fresh load/refresh per user request
+    localStorage.removeItem('gb_ap_start_time');
+
     function isConfigReady() {
         return (
             CONFIG.email && CONFIG.email !== 'your_email' &&
@@ -69,10 +72,23 @@
 
     // 3. UI Implementation
     const styles = `
-        #gb-tactical-panel { position: fixed; left: 0; top: 48px; z-index: 99999; display: flex; align-items: flex-start; font-family: 'Consolas', 'Roboto Mono', monospace; transition: transform 0.4s; }
+        #gb-tactical-panel { 
+            position: fixed; left: 0; top: 48px; z-index: 99999; display: flex; align-items: flex-start; font-family: 'Consolas', 'Roboto Mono', monospace; transition: transform 0.4s; 
+            --gb-accent: #666; /* Default Offline Gray */
+            --gb-accent-glow: rgba(100, 100, 100, 0.2);
+        }
+        #gb-tactical-panel.gb-standby {
+            --gb-accent: #f59e0b; /* Standby Orange */
+            --gb-accent-glow: rgba(245, 158, 11, 0.4);
+        }
+        #gb-tactical-panel.gb-active {
+            --gb-accent: #22c55e; /* Active Green */
+            --gb-accent-glow: rgba(34, 197, 94, 0.4);
+        }
+
         #gb-tactical-panel.collapsed { transform: translateX(-320px); }
-        #gb-content { width: 320px; max-height: calc(100vh - 60px); display: flex; flex-direction: column; background: rgba(8,8,8,0.98); border: 1px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; border-left: none; color: #eee; padding: 20px; backdrop-filter: blur(12px); box-shadow: 10px 0 30px rgba(0,0,0,0.5); }
-        #gb-toggle { background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; color: #000; padding: 24px 8px; cursor: pointer; writing-mode: vertical-lr; text-transform: uppercase; font-size: 10px; font-weight: 900; letter-spacing: 1px; border-radius: 0 4px 4px 0; transition: background 0.3s; }
+        #gb-content { width: 320px; max-height: calc(100vh - 60px); display: flex; flex-direction: column; background: rgba(8,8,8,0.98); border: 1px solid var(--gb-accent); border-left: none; color: #eee; padding: 20px; backdrop-filter: blur(12px); box-shadow: 10px 0 30px rgba(0,0,0,0.5); transition: border-color 0.3s; }
+        #gb-toggle { background: var(--gb-accent); color: #000; padding: 24px 8px; cursor: pointer; writing-mode: vertical-lr; text-transform: uppercase; font-size: 10px; font-weight: 900; letter-spacing: 1px; border-radius: 0 4px 4px 0; transition: background 0.3s; }
         
         #gb-tactical-panel.gb-off #gb-toggle { background: #666 !important; }
         #gb-tactical-panel.gb-off #gb-content { border-color: #444 !important; }
@@ -82,26 +98,26 @@
         #gb-tactical-panel.gb-off .gb-stat-value { color: #888 !important; text-shadow: none !important; }
         #gb-tactical-panel.gb-off .gb-telemetry::before { background: #666 !important; box-shadow: none !important; }
 
-        .gb-header { border-bottom: 2px solid ${isConfigReady() ? '#22c55e' : '#f59e0b'}; margin-bottom: 20px; padding-bottom: 8px; transition: border-color 0.3s; }
-        .gb-header h2 { margin: 0; font-size: 15px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; letter-spacing: 1px; transition: color 0.3s; }
+        .gb-header { border-bottom: 2px solid var(--gb-accent); margin-bottom: 20px; padding-bottom: 8px; transition: border-color 0.3s; }
+        .gb-header h2 { margin: 0; font-size: 15px; color: var(--gb-accent); letter-spacing: 1px; transition: color 0.3s; }
 
-        .gb-label { font-size: 10px; color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-transform: uppercase; margin-bottom: 6px; display: block; font-weight: 800; opacity: 0.9; margin-top: 14px; letter-spacing: 1px; }
+        .gb-label { font-size: 10px; color: var(--gb-accent); text-transform: uppercase; margin-bottom: 6px; display: block; font-weight: 800; opacity: 0.9; margin-top: 14px; letter-spacing: 1px; transition: color 0.3s; }
         .gb-label:first-child { margin-top: 0; }
         
         .gb-input { width: 100%; background: #000; border: 1px solid #222; color: #fff; padding: 10px; font-size: 12px; box-sizing: border-box; font-family: inherit; transition: border-color 0.2s; border-radius: 2px; }
-        .gb-input:focus { border-color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; outline: none; box-shadow: 0 0 10px rgba(34, 197, 94, 0.1); }
+        .gb-input:focus { border-color: var(--gb-accent); outline: none; box-shadow: 0 0 10px var(--gb-accent-glow); }
         
         .gb-telemetry { background: #050505; border: 1px solid #1a1a1a; padding: 18px; margin-bottom: 20px; position: relative; border-radius: 4px; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
-        .gb-telemetry::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; box-shadow: 0 0 10px ${isConfigReady() ? '#22c55e' : '#f59e0b'}; opacity: 0.6; }
+        .gb-telemetry::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: var(--gb-accent); box-shadow: 0 0 10px var(--gb-accent); opacity: 0.6; transition: background 0.3s, box-shadow 0.3s; }
         
         .gb-stat-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px; padding-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.05); }
         .gb-stat-row:last-child { border-bottom: none; }
         .gb-stat-label { color: #777; text-transform: uppercase; font-weight: bold; font-size: 9px; letter-spacing: 0.5px; display: flex; align-items: center; }
-        .gb-prefix-icon { color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; opacity: 0.5; }
-        .gb-stat-value { color: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; text-align: right; font-weight: 900; text-shadow: 0 0 10px rgba(34, 197, 94, 0.4); font-family: 'Consolas', monospace; }
+        .gb-prefix-icon { color: var(--gb-accent); opacity: 0.5; transition: color 0.3s; }
+        .gb-stat-value { color: var(--gb-accent); text-align: right; font-weight: 900; text-shadow: 0 0 10px var(--gb-accent-glow); font-family: 'Consolas', monospace; transition: color 0.3s, text-shadow 0.3s; }
 
         .btn-group { display: flex; gap: 8px; margin-top: 15px; }
-        .gb-btn { background: ${isConfigReady() ? '#22c55e' : '#f59e0b'}; color: #000; border: none; padding: 12px; font-weight: 950; text-transform: uppercase; cursor: pointer; flex: 1; font-size: 11px; transition: opacity 0.2s; }
+        .gb-btn { background: var(--gb-accent); color: #000; border: none; padding: 12px; font-weight: 950; text-transform: uppercase; cursor: pointer; flex: 1; font-size: 11px; transition: opacity 0.2s, background 0.3s; }
         .gb-btn:hover { opacity: 0.85; }
         .gb-btn-sec { background: transparent; color: #ccc; border: 1px solid #333; }
         .gb-btn-sec:hover { border-color: #666; color: #fff; }
@@ -329,7 +345,33 @@
             top: 0;
         }
         .gb-slider-native::-webkit-slider-thumb:hover { transform: scale(1.2); box-shadow: 0 0 18px var(--thumb-color, transparent); }
+        
+        /* Uptime Styles */
+        .gb-uptime-row { position: relative; }
+        .gb-reset-btn { 
+            font-size: 8px; 
+            color: #666; 
+            cursor: pointer; 
+            margin-left: 6px; 
+            transition: color 0.2s; 
+            text-decoration: underline;
+            vertical-align: middle;
+        }
+        .gb-reset-btn:hover { color: #ff4444; }
     `;
+
+    function formatDuration(ms) {
+        if (!ms || ms < 0) return "0s";
+        const totalSecs = Math.floor(ms / 1000);
+        const h = Math.floor(totalSecs / 3600);
+        const m = Math.floor((totalSecs % 3600) / 60);
+        const s = totalSecs % 60;
+        let res = "";
+        if (h > 0) res += `${h}h `;
+        if (m > 0 || h > 0) res += `${m}m `;
+        res += `${s}s`;
+        return res;
+    }
 
     function initUI() {
         if (document.getElementById('gb-tactical-panel')) return;
@@ -361,6 +403,7 @@
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>MEGA_PROXIMITY</span><span id="val-mega" class="gb-stat-value">INF</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>FUEL_CONSUMPTION</span><span id="val-fuel-cost" class="gb-stat-value">-- / HOP</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>RUN_TIME</span><span class="gb-stat-value"><span id="val-uptime">0s</span><span id="gb-reset-uptime" class="gb-reset-btn" title="RESET_TIMER">RESET</span></span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>RANK [ W / T / E ]</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
                     </div>
                     <div id="gb-collapse-toggle"></div>
@@ -458,6 +501,12 @@
             }
             const newState = !CONFIG.isPilotEnabled;
             saveConfig({ isPilotEnabled: newState });
+            
+            // Reset uptime if toggled OFF
+            if (!newState) {
+                localStorage.removeItem('gb_ap_start_time');
+            }
+
             const panel = document.getElementById('gb-tactical-panel');
             if (panel) panel.classList.toggle('gb-off', !newState);
             const chip = e.currentTarget;
@@ -480,6 +529,7 @@
                 webhookUrl: document.getElementById('cfg-webhook').value,
                 webhookInterval: parseInt(document.getElementById('cfg-webhook-int').value) * 1000
             });
+            localStorage.removeItem('gb_ap_start_time');
             location.reload();
         };
 
@@ -589,6 +639,12 @@
             };
         }
 
+        // Apply initial state
+        if (isConfigReady()) {
+            const hasGame = !!document.querySelector('canvas');
+            panel.classList.toggle('gb-standby', hasGame);
+        }
+
         if (scrollArea && telemetryBlock) {
             scrollArea.addEventListener('scroll', () => {
                 // Restore auto-logic if user scrolls deep enough
@@ -605,6 +661,18 @@
                     window.manualTelemetryOverride = 'open';
                 }
             });
+        }
+
+        const resetBtn = panel.querySelector('#gb-reset-uptime');
+        if (resetBtn) {
+            resetBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (confirm('Reset Auto-Pilot Run Timer?')) {
+                    localStorage.removeItem('gb_ap_start_time');
+                    if (CONFIG.isPilotEnabled) localStorage.setItem('gb_ap_start_time', Date.now().toString());
+                    log('AP Run Timer reset.');
+                }
+            };
         }
     }
 
@@ -723,7 +791,7 @@
 
     function refreshLiveData() {
         try {
-            let bank = "0", onHand = "0", fuel = "--/--";
+            let bank = "N/A", onHand = "N/A", fuel = "N/A";
             document.querySelectorAll('div[data-tutorial="credits"]').forEach(el => {
                 const p = getPropsFromFiber(el, ['balance', 'label']);
                 if (p?.label === 'Bank') bank = p.balance; if (p?.label === 'On Hand') onHand = p.balance;
@@ -735,7 +803,7 @@
                 if (p) fuel = `${p.value}/${p.maxValue}`;
             }
 
-            if (fuel === "--/--") {
+            if (fuel === "N/A") {
                 const fuelTitle = [...document.querySelectorAll('span')].find(el => el.innerText === 'Fuel');
                 if (fuelTitle) {
                     const p = getPropsFromFiber(fuelTitle, ['value', 'maxValue']);
@@ -760,7 +828,7 @@
             }
             
             // Fuel Parsing
-            if (fuel !== "--/--") {
+            if (fuel !== "N/A") {
                 const [cur, tot] = fuel.split('/').map(n => parseInt(n.replace(/,/g,'')));
                 fuelCur = cur; fuelMax = tot;
                 if (!isNaN(cur) && !isNaN(tot)) fuelPct = (cur / tot) * 100;
@@ -841,13 +909,57 @@
                 if (window.lastWebhookError) {
                     dotEl.style.color = '#ff4444';
                 } else {
-                    dotEl.style.color = isConfigReady() ? '#22c55e' : '#f59e0b';
+                    const isInGame = !!document.querySelector('canvas');
+                    const isSynced = isInGame && isConfigReady() && bank !== 'N/A' && fuel !== 'N/A';
+                    const panel = document.getElementById('gb-tactical-panel');
+                    if (panel) {
+                        panel.classList.toggle('gb-active', isSynced);
+                        // Standby (Orange) only if in game but not synced
+                        panel.classList.toggle('gb-standby', isInGame && !isSynced);
+                    }
+                    
+                    if (isSynced) dotEl.style.color = '#22c55e';
+                    else if (isInGame) dotEl.style.color = '#f59e0b';
+                    else dotEl.style.color = '#666';
                 }
             }
 
             if (headerEl) {
                 const syncMsg = window.lastWebhookError ? `REMOTE_SYNC_ERROR :: ${window.lastWebhookError}` : `REMOTE_SYNC :: OK`;
                 headerEl.title = `LOCAL_SENSE :: ${new Date().toLocaleTimeString()}\n${syncMsg}`;
+            }
+
+            // Auto-detect charName if still at default
+            if (CONFIG.charName === 'your_character_name' || !CONFIG.charName) {
+                // Try to find character name from game UI (usually in a specific span or profile header)
+                const charEl = [...document.querySelectorAll('span, div')].find(el => el.innerText?.includes('HearSilent') || (el.classList.contains('pilot-name') && el.innerText));
+                if (charEl) {
+                    const detected = charEl.innerText.trim();
+                    if (detected && detected !== 'PILOT') {
+                        CONFIG.charName = detected;
+                        saveConfig(CONFIG);
+                        log(`System identity auto-detected: ${detected}`);
+                        const charInput = document.getElementById('cfg-char');
+                        if (charInput) charInput.value = detected;
+                    }
+                }
+            }
+
+            // Update Uptime
+            if (CONFIG.isPilotEnabled) {
+                let startTime = localStorage.getItem('gb_ap_start_time');
+                if (!startTime) {
+                    startTime = Date.now().toString();
+                    localStorage.setItem('gb_ap_start_time', startTime);
+                }
+                const uptimeMs = Date.now() - parseInt(startTime);
+                const upEl = document.getElementById('val-uptime');
+                if (upEl) upEl.innerText = formatDuration(uptimeMs);
+                window.currentApUptime = Math.floor(uptimeMs / 1000);
+            } else {
+                const upEl = document.getElementById('val-uptime');
+                if (upEl) upEl.innerText = "OFF";
+                window.currentApUptime = 0;
             }
 
             return { bank, onHand, fuel, currentSector, fuelPct };
@@ -989,8 +1101,9 @@
                 rankWealth,
                 rankTrading,
                 rankExploration,
-                totalWealth,
                 fuelThreshold: CONFIG.fuelThreshold || 40,
+                isPilotEnabled: CONFIG.isPilotEnabled ? 1 : 0,
+                apUptime: window.currentApUptime || 0,
                 timestamp: new Date().toISOString()
             };
             const response = await fetch(CONFIG.webhookUrl, {
