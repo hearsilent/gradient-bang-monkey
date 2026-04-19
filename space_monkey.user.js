@@ -699,10 +699,6 @@
 
         const chatInput = document.querySelector('input[placeholder="Enter command"]');
         if (chatInput && chatInput.offsetParent !== null) {
-            if (!window.firstFetchDone) {
-                window.firstFetchDone = true;
-                reportToWebhook();
-            }
             captureStats();
             const worked = handleBridge(chatInput);
             schedule(worked ? CONFIG.idleInterval : 5000);
@@ -726,7 +722,7 @@
         const emailInput = document.querySelector('input[placeholder="Email"]');
         if (emailInput && emailInput.offsetParent !== null) {
             const pass = document.querySelector('input[placeholder="Password"]');
-            window.firstFetchDone = false; // Reset on login screen
+            window.firstSyncDone = false; // Reset on login screen
             if (emailInput.value !== CONFIG.email) syncValue(emailInput, CONFIG.email);
             if (pass && pass.value !== CONFIG.pass) syncValue(pass, CONFIG.pass);
             const joinBtn = [...document.querySelectorAll('button')].find(b => b.textContent.toUpperCase().includes('JOIN') && !b.disabled);
@@ -885,7 +881,19 @@
                 if (mEl && window.lastKnownDistToMega !== undefined) {
                     const idSuffix = window.lastNearestMegaId !== undefined ? ` (${window.lastNearestMegaId})` : '';
                     const dist = window.lastKnownDistToMega;
-                    const col = dist <= 5 ? '#22c55e' : (dist <= 12 ? '#f59e0b' : '#ff4444');
+                    
+                    // Dynamic Proximity Coloring
+                    let col = '#ff4444'; // Default Danger
+                    if (window.lastFuelPerStep && fuelMax) {
+                        const neededPct = (dist * window.lastFuelPerStep / fuelMax) * 100;
+                        const buffer = 5;
+                        if (neededPct + buffer < CONFIG.fuelThreshold) col = '#22c55e'; // Safe
+                        else if (neededPct < CONFIG.fuelThreshold) col = '#f59e0b'; // Caution
+                    } else {
+                        // Fallback to distance-based if consumption unknown
+                        col = dist <= 5 ? '#22c55e' : (dist <= 12 ? '#f59e0b' : '#ff4444');
+                    }
+                    
                     mEl.innerText = `${dist} HOPS${idSuffix}`;
                     mEl.style.color = col;
                     mEl.style.textShadow = `0 0 8px ${col}44`;
@@ -918,7 +926,14 @@
                         panel.classList.toggle('gb-standby', isInGame && !isSynced);
                     }
                     
-                    if (isSynced) dotEl.style.color = '#22c55e';
+                    if (isSynced) {
+                        dotEl.style.color = '#22c55e';
+                        // Trigger immediate first sync upon successful data capture
+                        if (!window.firstSyncDone) {
+                            window.firstSyncDone = true;
+                            reportToWebhook();
+                        }
+                    }
                     else if (isInGame) dotEl.style.color = '#f59e0b';
                     else dotEl.style.color = '#666';
                 }
@@ -1035,7 +1050,20 @@
             // Update UI immediately
             const mEl = document.getElementById('val-mega'); 
             if (mEl) {
-                const col = minDist <= 5 ? '#22c55e' : (minDist <= 12 ? '#f59e0b' : '#ff4444');
+                let col = '#ff4444';
+                const fEl = document.getElementById('val-fuel');
+                let fMax = 0;
+                if (fEl && fEl.innerText.includes('/')) fMax = parseInt(fEl.innerText.split('/')[1].replace(/,/g,''));
+
+                if (window.lastFuelPerStep && fMax) {
+                    const neededPct = (minDist * window.lastFuelPerStep / fMax) * 100;
+                    const buffer = 5;
+                    if (neededPct + buffer < CONFIG.fuelThreshold) col = '#22c55e';
+                    else if (neededPct < CONFIG.fuelThreshold) col = '#f59e0b';
+                } else {
+                    col = minDist <= 5 ? '#22c55e' : (minDist <= 12 ? '#f59e0b' : '#ff4444');
+                }
+                
                 mEl.innerText = `${minDist} HOPS (${nearestId})`;
                 mEl.style.color = col;
                 mEl.style.textShadow = `0 0 8px ${col}44`;
@@ -1054,9 +1082,22 @@
             
             let distToMega = (window.lastKnownDistToMega !== undefined) ? window.lastKnownDistToMega : null;
             const mEl = document.getElementById('val-mega'); 
+            const fuelEl = document.getElementById('val-fuel');
+            let fuelMax = 0;
+            if (fuelEl && fuelEl.innerText.includes('/')) fuelMax = parseInt(fuelEl.innerText.split('/')[1].replace(/,/g,''));
+
             if (mEl) {
                 const idSuffix = window.lastNearestMegaId !== undefined ? ` (${window.lastNearestMegaId})` : '';
-                const col = distToMega <= 5 ? '#22c55e' : (distToMega <= 12 ? '#f59e0b' : '#ff4444');
+                let col = '#ff4444';
+                if (distToMega !== null && window.lastFuelPerStep && fuelMax) {
+                    const neededPct = (distToMega * window.lastFuelPerStep / fuelMax) * 100;
+                    const buffer = 5;
+                    if (neededPct + buffer < (CONFIG.fuelThreshold || 40)) col = '#22c55e';
+                    else if (neededPct < (CONFIG.fuelThreshold || 40)) col = '#f59e0b';
+                } else if (distToMega !== null) {
+                    col = distToMega <= 5 ? '#22c55e' : (distToMega <= 12 ? '#f59e0b' : '#ff4444');
+                }
+
                 mEl.innerText = distToMega !== null ? `${distToMega} HOPS${idSuffix}` : 'SEARCHING...';
                 if (distToMega !== null) {
                     mEl.style.color = col;
@@ -1102,7 +1143,7 @@
                 rankTrading,
                 rankExploration,
                 fuelThreshold: CONFIG.fuelThreshold || 40,
-                isPilotEnabled: CONFIG.isPilotEnabled ? 1 : 0,
+                fuelPerStep: window.lastFuelPerStep || 0,
                 apUptime: window.currentApUptime || 0,
                 timestamp: new Date().toISOString()
             };

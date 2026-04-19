@@ -31,6 +31,7 @@ export default {
         distToMega INTEGER,
         nearestMegaId INTEGER,
         fuelThreshold INTEGER DEFAULT 40,
+        fuelPerStep REAL DEFAULT 0,
         isPilotEnabled INTEGER DEFAULT 0,
         apUptime INTEGER DEFAULT 0,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -49,6 +50,7 @@ export default {
     await migrate("ALTER TABLE telemetry ADD COLUMN distToMega INTEGER");
     await migrate("ALTER TABLE telemetry ADD COLUMN nearestMegaId INTEGER");
     await migrate("ALTER TABLE telemetry ADD COLUMN fuelThreshold INTEGER DEFAULT 40");
+    await migrate("ALTER TABLE telemetry ADD COLUMN fuelPerStep REAL DEFAULT 0");
     await migrate("ALTER TABLE telemetry ADD COLUMN isPilotEnabled INTEGER DEFAULT 0");
     await migrate("ALTER TABLE telemetry ADD COLUMN apUptime INTEGER DEFAULT 0");
 
@@ -90,6 +92,7 @@ export default {
             distToMega: row.distToMega,
             nearestMegaId: row.nearestMegaId,
             fuelThreshold: row.fuelThreshold,
+            fuelPerStep: row.fuelPerStep,
             isPilotEnabled: row.isPilotEnabled,
             apUptime: row.apUptime,
             timestamp: row.timestamp
@@ -103,7 +106,7 @@ export default {
 
       // Return history for specific character
       const { results: historyResults } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, apUptime, timestamp 
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, timestamp 
         FROM telemetry 
         WHERE charName = ? 
         ORDER BY timestamp DESC 
@@ -119,14 +122,14 @@ export default {
     if (request.method === "POST") {
       try {
         const data = await request.json();
-        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, apUptime, timestamp } = data;
+        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, timestamp } = data;
 
         if (!charName) throw new Error("Missing charName");
 
         // Insert new record with absolute safety against 'undefined'
         await env.gb_banana.prepare(`
-          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, isPilotEnabled, apUptime, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, currentSector, distToMega, nearestMegaId, fuelThreshold, fuelPerStep, isPilotEnabled, apUptime, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           charName ?? null, 
           bank ?? null, 
@@ -139,7 +142,8 @@ export default {
           currentSector ?? null, 
           distToMega ?? null, 
           nearestMegaId ?? null, 
-          fuelThreshold ?? 40, 
+          fuelThreshold ?? 40,
+          fuelPerStep ?? 0, 
           isPilotEnabled ?? 0, 
           apUptime ?? 0, 
           timestamp ?? new Date().toISOString()
@@ -640,11 +644,11 @@ function generateDashboardHTML() {
                     </div>\
                     <div class="stat-row">\
                         <span class="stat-label">CREDITS_BANK</span>\
-                        <span class="stat-value">' + stats.bank + '</span>\
+                        <span class="stat-value">' + (stats.bank || '0').toString().split('.')[0] + '</span>\
                     </div>\
                     <div class="stat-row">\
                         <span class="stat-label">CREDITS_HAND</span>\
-                        <span class="stat-value">' + stats.onHand + '</span>\
+                        <span class="stat-value">' + (stats.onHand || '0').toString().split('.')[0] + '</span>\
                     </div>\
                     <div class="stat-row">\
                         <span class="stat-label">CURRENT_LOCATION</span>\
@@ -652,7 +656,7 @@ function generateDashboardHTML() {
                     </div>\
                     <div class="stat-row">\
                         <span class="stat-label">MEGA_PORT_PROXIMITY</span>\
-                        <span class="stat-value" style="color: ' + (stats.distToMega !== null ? (stats.distToMega <= 5 ? '#22c55e' : (stats.distToMega <= 12 ? '#f59e0b' : '#ff4444')) : '#22c55e') + ';">\
+                        <span class="stat-value" id="mega-prox-' + name + '">\
                             ' + (stats.distToMega !== null ? stats.distToMega + ' HOPS' + (stats.nearestMegaId !== undefined ? ' (' + stats.nearestMegaId + ')' : '') : 'INF') + '\
                         </span>\
                     </div>\
@@ -671,7 +675,7 @@ function generateDashboardHTML() {
                     </div>\
                     <div class="stat-row">\
                         <span class="stat-label">TOTAL_WEALTH</span>\
-                        <span class="stat-value" style="color:#22c55e">' + (stats.totalWealth || '0') + '</span>\
+                        <span class="stat-value" style="color:#22c55e">' + (stats.totalWealth || '0').toString().split('.')[0] + '</span>\
                     </div>\
                     <div class="rank-grid">\
                         ' + renderRankItem('Rank_Wealth', stats.rankWealth, prevStats?.rankWealth) + '\
@@ -680,6 +684,22 @@ function generateDashboardHTML() {
                     </div>\
                     <div class="timestamp">LAST_SYNC: ' + lastSeen + '</div>\
                 ';
+
+                // Update Proximity Color Dynamically
+                const mEl = document.getElementById('mega-prox-' + name);
+                if (mEl && stats.distToMega !== null) {
+                    let col = '#ff4444';
+                    if (stats.fuelPerStep && fTot) {
+                        const neededPct = (stats.distToMega * stats.fuelPerStep / fTot) * 100;
+                        const buffer = 5;
+                        if (neededPct + buffer < (stats.fuelThreshold || 40)) col = '#22c55e';
+                        else if (neededPct < (stats.fuelThreshold || 40)) col = '#f59e0b';
+                    } else {
+                        col = stats.distToMega <= 5 ? '#22c55e' : (stats.distToMega <= 12 ? '#f59e0b' : '#ff4444');
+                    }
+                    mEl.style.color = col;
+                    mEl.style.textShadow = '0 0 8px ' + col + '44';
+                }
             });
         }
 
