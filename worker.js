@@ -23,9 +23,23 @@ export default {
         bank TEXT,
         onHand TEXT,
         fuel TEXT,
+        rankWealth TEXT,
+        rankTrading TEXT,
+        rankExploration TEXT,
+        totalWealth TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `).run();
+
+    // Migration: Add columns if they don't exist
+    try {
+      await env.gb_banana.prepare("ALTER TABLE telemetry ADD COLUMN rankWealth TEXT").run();
+      await env.gb_banana.prepare("ALTER TABLE telemetry ADD COLUMN rankTrading TEXT").run();
+      await env.gb_banana.prepare("ALTER TABLE telemetry ADD COLUMN rankExploration TEXT").run();
+      await env.gb_banana.prepare("ALTER TABLE telemetry ADD COLUMN totalWealth TEXT").run();
+    } catch (e) {
+      // Columns likely already exist
+    }
 
     // GET: Retrieve telemetry
     if (request.method === "GET") {
@@ -57,6 +71,10 @@ export default {
             bank: row.bank,
             onHand: row.onHand,
             fuel: row.fuel,
+            rankWealth: row.rankWealth,
+            rankTrading: row.rankTrading,
+            rankExploration: row.rankExploration,
+            totalWealth: row.totalWealth,
             timestamp: row.timestamp
           };
         });
@@ -68,7 +86,7 @@ export default {
 
       // Return history for specific character
       const { results } = await env.gb_banana.prepare(`
-        SELECT bank, onHand, fuel, timestamp 
+        SELECT bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, timestamp 
         FROM telemetry 
         WHERE charName = ? 
         ORDER BY timestamp DESC 
@@ -84,15 +102,15 @@ export default {
     if (request.method === "POST") {
       try {
         const data = await request.json();
-        const { charName, bank, onHand, fuel, timestamp } = data;
+        const { charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, timestamp } = data;
 
         if (!charName) throw new Error("Missing charName");
 
         // Insert new record
         await env.gb_banana.prepare(`
-          INSERT INTO telemetry (charName, bank, onHand, fuel, timestamp)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(charName, bank, onHand, fuel, timestamp || new Date().toISOString()).run();
+          INSERT INTO telemetry (charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(charName, bank, onHand, fuel, rankWealth, rankTrading, rankExploration, totalWealth, timestamp || new Date().toISOString()).run();
           
         return new Response("OK", { headers: corsHeaders });
       } catch (err) {
@@ -202,6 +220,35 @@ function generateDashboardHTML() {
             font-weight: 900;
             text-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
         }
+        .stat-value.rank {
+            color: #f59e0b;
+            text-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+        }
+        .rank-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+            background: rgba(255,255,255,0.02);
+            padding: 8px;
+            border: 1px solid #111;
+        }
+        .rank-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .rank-label {
+            font-size: 7px;
+            color: #666;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+        }
+        .rank-val {
+            font-size: 11px;
+            color: #f59e0b;
+            font-weight: 900;
+        }
         .timestamp {
             margin-top: 15px;
             font-size: 9px;
@@ -290,6 +337,24 @@ function generateDashboardHTML() {
                     <div class="stat-row">
                         <span class="stat-label">FUEL_CAPACITY</span>
                         <span class="stat-value">\${stats.fuel}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">TOTAL_WEALTH</span>
+                        <span class="stat-value" style="color:#22c55e">\${stats.totalWealth || '0'}</span>
+                    </div>
+                    <div class="rank-grid">
+                        <div class="rank-item">
+                            <span class="rank-label">Rank_Wealth</span>
+                            <span class="rank-val">\${stats.rankWealth || 'N/A'}</span>
+                        </div>
+                        <div class="rank-item">
+                            <span class="rank-label">Rank_Trade</span>
+                            <span class="rank-val">\${stats.rankTrading || 'N/A'}</span>
+                        </div>
+                        <div class="rank-item">
+                            <span class="rank-label">Rank_Exp</span>
+                            <span class="rank-val">\${stats.rankExploration || 'N/A'}</span>
+                        </div>
                     </div>
                     <div class="timestamp">LAST_SYNC: \${lastSeen}</div>
                 \`;

@@ -133,6 +133,7 @@
                     <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_BANK</span><span id="val-bank" class="gb-stat-value">0</span></div>
                     <div class="gb-stat-row"><span class="gb-stat-label">CREDITS_HAND</span><span id="val-hand" class="gb-stat-value">0</span></div>
                     <div class="gb-stat-row"><span class="gb-stat-label">FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
+                    <div class="gb-stat-row"><span class="gb-stat-label">RANK_W / T / E</span><span id="val-ranks" class="gb-stat-value">-- / -- / --</span></div>
                 </div>
                 <div class="gb-scroll-area">
                     <span class="gb-label">Access Email</span>
@@ -211,7 +212,7 @@
         window.downloadLogs = (format) => {
             const h = JSON.parse(localStorage.getItem('gb_history') || '[]');
             const l = JSON.parse(localStorage.getItem('gb_leaderboard_history') || '[]');
-            const content = format === 'json' ? JSON.stringify({stats:h, leaderboard:l}, null, 2) : "Timestamp,Bank,OnHand,Fuel\n" + h.map(x=>`"${x.t}",${x.b},${x.h},"${x.f}"`).join("\n");
+            const content = format === 'json' ? JSON.stringify({stats:h, leaderboard:l}, null, 2) : "Timestamp,Bank,OnHand,Fuel,Rank_W,Rank_T,Rank_E\n" + h.map(x=>`"${x.t}",${x.b},${x.h},"${x.f}","${x.rw||'N/A'}","${x.rt||'N/A'}","${x.re||'N/A'}"`).join("\n");
             const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([content], { type: format==='json'?'application/json':'text/csv' })); a.download = `gb_report.${format}`; a.click();
         };
     }
@@ -239,6 +240,10 @@
 
         const chatInput = document.querySelector('input[placeholder="Enter command"]');
         if (chatInput && chatInput.offsetParent !== null) {
+            if (!window.firstFetchDone) {
+                window.firstFetchDone = true;
+                reportToWebhook();
+            }
             captureStats();
             const worked = handleBridge(chatInput);
             schedule(worked ? CONFIG.idleInterval : 5000);
@@ -262,6 +267,7 @@
         const emailInput = document.querySelector('input[placeholder="Email"]');
         if (emailInput && emailInput.offsetParent !== null) {
             const pass = document.querySelector('input[placeholder="Password"]');
+            window.firstFetchDone = false; // Reset on login screen
             if (emailInput.value !== CONFIG.email) syncValue(emailInput, CONFIG.email);
             if (pass && pass.value !== CONFIG.pass) syncValue(pass, CONFIG.pass);
             const joinBtn = [...document.querySelectorAll('button')].find(b => b.textContent.toUpperCase().includes('JOIN') && !b.disabled);
@@ -358,7 +364,16 @@
             const stats = refreshLiveData();
             if (!stats) return;
             let history = JSON.parse(localStorage.getItem('gb_history') || '[]');
-            history.push({ t: new Date().toLocaleString(), b: stats.bank, h: stats.onHand, f: stats.fuel });
+            const ranks = window.lastRanks || { w: "N/A", t: "N/A", e: "N/A" };
+            history.push({ 
+                t: new Date().toLocaleString(), 
+                b: stats.bank, 
+                h: stats.onHand, 
+                f: stats.fuel,
+                rw: ranks.w,
+                rt: ranks.t,
+                re: ranks.e
+            });
             if (history.length > 2000) history.shift();
             localStorage.setItem('gb_history', JSON.stringify(history));
         } catch (e) { }
@@ -370,11 +385,46 @@
         try {
             const stats = refreshLiveData();
             if (!stats) return;
+            let rankWealth = "N/A";
+            let rankTrading = "N/A";
+            let rankExploration = "N/A";
+            let totalWealth = "0";
+
+            try {
+                const lbResponse = await fetch('https://api.gradient-bang.com/functions/v1/leaderboard_resources');
+                const lbData = await lbResponse.json();
+                if (lbData.success) {
+                    const findR = (arr) => {
+                        const humanArr = (arr || []).filter(p => p.player_type === 'human');
+                        const idx = humanArr.findIndex(p => p.player_name?.trim().toUpperCase() === CONFIG.charName.trim().toUpperCase());
+                        return idx !== -1 ? `#${idx + 1}` : "N/A";
+                    };
+                    
+                    rankWealth = findR(lbData.wealth);
+                    rankTrading = findR(lbData.trading);
+                    rankExploration = findR(lbData.exploration);
+
+                    const myWealth = lbData.wealth?.find(p => p.player_name?.trim().toUpperCase() === CONFIG.charName.trim().toUpperCase());
+                    if (myWealth) totalWealth = myWealth.total_wealth.toLocaleString();
+
+                    window.lastRanks = { w: rankWealth, t: rankTrading, e: rankExploration };
+                }
+            } catch (lbErr) {
+                log('Leaderboard fetch failed: ' + lbErr.message);
+            }
+
+            const rEl = document.getElementById('val-ranks');
+            if (rEl) rEl.innerText = `${rankWealth} / ${rankTrading} / ${rankExploration}`;
+
             const payload = {
                 charName: CONFIG.charName,
                 bank: stats.bank,
                 onHand: stats.onHand,
                 fuel: stats.fuel,
+                rankWealth,
+                rankTrading,
+                rankExploration,
+                totalWealth,
                 timestamp: new Date().toISOString()
             };
             const response = await fetch(CONFIG.webhookUrl, {
@@ -405,20 +455,11 @@
     };
     bootstrap();
 
-    setInterval(async () => {
+    // Simple Periodic Session Refresh
+    setInterval(() => {
         if (isConfigReady()) {
-            const tr = [...document.querySelectorAll('button')].find(b => findFiber(b)?.memoizedProps?.onClick?.toString().includes('leaderboard'));
-            if (tr) {
-                tr.click(); await new Promise(r => setTimeout(r, 2000));
-                const c = document.querySelector('.size-full.overflow-auto');
-                if (c) {
-                    const rows = [...c.querySelectorAll('div')].filter(el => el.innerText && el.innerText.includes('\n'));
-                    const l = JSON.parse(localStorage.getItem('gb_leaderboard_history') || '[]');
-                    l.push({ time: new Date().toLocaleString(), myRank: (rows.find(r => r.innerText.includes(CONFIG.charName)) || {}).innerText, top3: rows.slice(0, 3).map(r => r.innerText) });
-                    localStorage.setItem('gb_leaderboard_history', JSON.stringify(l));
-                }
-            }
+            log('Periodic session refresh triggered.');
+            location.reload();
         }
-        location.reload();
     }, CONFIG.refreshInterval);
 })();
