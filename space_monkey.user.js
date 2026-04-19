@@ -361,6 +361,10 @@
 
     function captureStats() {
         try {
+            const now = Date.now();
+            if (window.lastLogTime && now - window.lastLogTime < 60000) return;
+            window.lastLogTime = now;
+
             const stats = refreshLiveData();
             if (!stats) return;
             let history = JSON.parse(localStorage.getItem('gb_history') || '[]');
