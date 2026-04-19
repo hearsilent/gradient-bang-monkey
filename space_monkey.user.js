@@ -212,6 +212,12 @@
         .gb-telemetry::before { content: ""; position: absolute; left: 0; top: 0; width: 4px; height: 100%; border-radius: 2px 0 0 2px; }
         .stats-collapsed .gb-telemetry { padding-top: 4px; padding-bottom: 4px; }
         .stats-collapsed .gb-telemetry::before { height: 100%; }
+
+        .gb-rank-gold { color: #fbbf24 !important; text-shadow: 0 0 10px rgba(251, 191, 36, 0.4) !important; font-weight: 900; }
+        .gb-rank-cyan { color: #22d3ee !important; text-shadow: 0 0 10px rgba(34, 211, 238, 0.4) !important; font-weight: 800; }
+        .gb-rank-purple { color: #a78bfa !important; text-shadow: 0 0 10px rgba(167, 139, 250, 0.4) !important; }
+        .gb-rank-green { color: #4ade80 !important; text-shadow: 0 0 10px rgba(74, 222, 128, 0.3) !important; }
+        .gb-rank-gray { color: #6b7280 !important; text-shadow: none !important; opacity: 0.8; }
     `;
 
     function initUI() {
@@ -622,6 +628,22 @@
         } catch (e) { }
     }
 
+    const getRankDisplay = (rank) => {
+        if (!rank || rank === 'N/A') return `<span class="gb-rank-gray">N/A</span>`;
+        const val = parseInt(rank.replace('#', ''));
+        if (isNaN(val)) return `<span class="gb-rank-gray">${rank}</span>`;
+        if (val > 500) return `<span class="gb-rank-gray">#${val}</span>`;
+        
+        let cls = 'gb-rank-gray';
+        let icon = '';
+        if (val === 1) { cls = 'gb-rank-gold'; icon = '👑 '; }
+        else if (val <= 10) { cls = 'gb-rank-cyan'; }
+        else if (val <= 100) { cls = 'gb-rank-purple'; }
+        else if (val <= 500) { cls = 'gb-rank-green'; }
+        
+        return `<span class="${cls}">${icon}#${val}</span>`;
+    };
+
     async function updateMegaPortDistance(sectorId) {
         if (window.isUpdatingMegaDist) return;
         window.isUpdatingMegaDist = true;
@@ -698,7 +720,9 @@
             } catch (lbErr) { log('Leaderboard fetch failed: ' + lbErr.message); }
 
             const rEl = document.getElementById('val-ranks');
-            if (rEl) rEl.innerText = `${rankWealth} / ${rankTrading} / ${rankExploration}`;
+            if (rEl) {
+                rEl.innerHTML = `${getRankDisplay(rankWealth)} / ${getRankDisplay(rankTrading)} / ${getRankDisplay(rankExploration)}`;
+            }
 
             const payload = {
                 charName: CONFIG.charName,

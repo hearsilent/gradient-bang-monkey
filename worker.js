@@ -173,20 +173,63 @@ function generateDashboardHTML() {
             pointer-events: none;
             z-index: 1000;
         }
-        .scanner {
+        
+        .noise {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 20px;
-            background: linear-gradient(180deg, transparent, rgba(34, 197, 94, 0.1), transparent);
-            animation: scan 8s linear infinite;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://grainy-gradients.vercel.app/noise.svg');
+            opacity: 0.15;
             pointer-events: none;
-            z-index: 1001;
+            z-index: 999;
+            filter: contrast(150%) brightness(100%);
         }
-        @keyframes scan {
-            0% { transform: translateY(-100px); }
-            100% { transform: translateY(100vh); }
+
+        @keyframes surge {
+            0% { transform: translate(0,0) skew(0deg); filter: hue-rotate(0deg); }
+            20% { transform: translate(-5px, 2px) skew(2deg); filter: hue-rotate(90deg) contrast(150%); }
+            40% { transform: translate(5px, -2px) skew(-2deg); }
+            60% { transform: translate(-3px, 5px) skew(1deg); filter: hue-rotate(-90deg); }
+            80% { transform: translate(3px, -5px) skew(0deg); }
+            100% { transform: translate(0,0) skew(0deg); filter: hue-rotate(0deg); }
+        }
+
+        body.glitch-active .container {
+            animation: surge 0.2s infinite;
+        }
+        body.glitch-active .noise {
+            opacity: 0.4;
+            filter: contrast(200%) brightness(150%);
+        }
+        body.glitch-active .card {
+            border-color: #ff00c1 !important;
+            box-shadow: 0 0 30px rgba(255, 0, 193, 0.3);
+        }
+
+        .glitch-text {
+            position: relative;
+        }
+        /* Keep subtle chromatics but remove the heavy animation */
+        .glitch-text::before, .glitch-text::after {
+            content: attr(data-text);
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0);
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+        body.glitch-active .glitch-text::before,
+        body.glitch-active .glitch-text::after {
+            opacity: 0.7;
+        }
+        .glitch-text::before {
+            left: 2px;
+            text-shadow: -1px 0 #ff00c1;
+            clip-path: inset(0 0 0 0);
+        }
+        .glitch-text::after {
+            left: -2px;
+            text-shadow: 1px 0 #00fff9;
+            clip-path: inset(0 0 0 0);
         }
 
         .container {
@@ -251,6 +294,7 @@ function generateDashboardHTML() {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            position: relative;
         }
         .gb-label {
             font-size: 10px;
@@ -368,7 +412,7 @@ function generateDashboardHTML() {
         }
         .timer-text {
             font-size: 10px; 
-            color: #888;
+            color: #22c55e;
             font-weight: bold;
             cursor: pointer;
             padding: 5px 10px;
@@ -399,13 +443,48 @@ function generateDashboardHTML() {
             box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
         }
 
+        /* Rank Tier Colors */
+        .rank-gold { color: #fbbf24 !important; text-shadow: 0 0 10px rgba(251, 191, 36, 0.4) !important; font-weight: 900; }
+        .rank-cyan { color: #22d3ee !important; text-shadow: 0 0 10px rgba(34, 211, 238, 0.4) !important; font-weight: 800; }
+        .rank-purple { color: #a78bfa !important; text-shadow: 0 0 10px rgba(167, 139, 250, 0.4) !important; }
+        .rank-green { color: #4ade80 !important; text-shadow: 0 0 10px rgba(74, 222, 128, 0.3) !important; }
+        .rank-gray { color: #6b7280 !important; opacity: 0.8; }
+
+        /* Rank Animation */
+        .rank-val-container {
+            position: relative;
+            height: 1.2em;
+            overflow: hidden;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+        .rank-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .rank-stack.animate-down { animation: push-down 0.7s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .rank-stack.animate-up { animation: push-up 0.7s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+        @keyframes push-down {
+            0% { transform: translateY(-50%); }
+            100% { transform: translateY(0); }
+        }
+        @keyframes push-up {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-50%); }
+        }
+
     </style>
 </head>
 <body>
-    <div class="scanner"></div>
+    <div class="noise"></div>
     <div class="container">
         <div class="header">
-            <h1>>> SYSTEM_MONITOR :: 0xCD1BA</h1>
+            <h1 class="glitch-text" data-text=">> SYSTEM_MONITOR :: 0xCD1BA">>> SYSTEM_MONITOR :: 0xCD1BA</h1>
             <div class="timer-text" id="refresh-trigger" title="Click to Force Sync">
                 NEXT_SYNC: <span id="countdown">30</span>S <span class="pulse-dot"></span>
             </div>
@@ -416,13 +495,16 @@ function generateDashboardHTML() {
     </div>
 
     <script>
+        let previousData = null;
+
         async function fetchData() {
             try {
                 const response = await fetch(window.location.href, {
                     headers: { 'Accept': 'application/json' }
                 });
                 const data = await response.json();
-                renderCards(data);
+                renderCards(data, previousData);
+                previousData = data;
                 document.getElementById('loading').style.display = 'none';
             } catch (error) {
                 console.error('Fetch error:', error);
@@ -430,10 +512,20 @@ function generateDashboardHTML() {
             }
         }
 
-        function renderCards(data) {
+        function getRankStyle(rank) {
+            if (!rank || rank === 'N/A') return { cls: 'rank-gray', icon: '' };
+            const val = parseInt(rank.replace('#', ''));
+            if (isNaN(val)) return { cls: 'rank-gray', icon: '' };
+            if (val > 500) return { cls: 'rank-gray', icon: '' };
+            if (val === 1) return { cls: 'rank-gold', icon: '👑' };
+            if (val <= 10) return { cls: 'rank-cyan', icon: '' };
+            if (val <= 100) return { cls: 'rank-purple', icon: '' };
+            if (val <= 500) return { cls: 'rank-green', icon: '' };
+            return { cls: 'rank-gray', icon: '' };
+        }
+
+        function renderCards(data, prev) {
             const grid = document.getElementById('grid');
-            grid.innerHTML = '';
-            
             const sortedChars = Object.keys(data).sort();
             
             if (sortedChars.length === 0) {
@@ -441,72 +533,102 @@ function generateDashboardHTML() {
                 return;
             }
 
+            // Create or update template for each char
             sortedChars.forEach(name => {
                 const stats = data[name];
-                const card = document.createElement('div');
+                const prevStats = prev ? prev[name] : null;
+                
+                let card = document.getElementById('card-' + name);
+                if (!card) {
+                    card = document.createElement('div');
+                    card.id = 'card-' + name;
+                    grid.appendChild(card);
+                }
+
                 const isPilotActive = stats.isPilotEnabled == 1;
                 card.className = 'card ' + (isPilotActive ? 'active' : 'inactive');
                 
                 const lastSeen = new Date(stats.timestamp).toLocaleString();
-                
                 const [fCur, fTot] = (stats.fuel || "0/1").split('/').map(n => parseInt(n.replace(/,/g,'')));
                 const fPct = Math.min(100, Math.max(0, (fCur / fTot) * 100));
                 const fCol = fPct < 30 ? '#ff4444' : (fPct < 70 ? '#f59e0b' : '#22c55e');
 
-                card.innerHTML = \`
-                    <div class="char-name">
-                        \${name}
-                        <div class="gb-toggle-chip \${isPilotActive ? 'active' : ''}">
-                            <span class="chip-label">AP</span>
-                            <span class="chip-state">\${isPilotActive ? 'ON' : 'OFF'}</span>
-                        </div>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">CREDITS_BANK</span>
-                        <span class="stat-value">\${stats.bank}</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">CREDITS_HAND</span>
-                        <span class="stat-value">\${stats.onHand}</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">CURRENT_LOCATION</span>
-                        <span class="stat-value">SECTOR \${stats.currentSector || '???' }</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">MEGA_PORT_PROXIMITY</span>
-                        <span class="stat-value" style="color: \${stats.distToMega !== null ? (stats.distToMega <= 5 ? '#22c55e' : (stats.distToMega <= 12 ? '#f59e0b' : '#ff4444')) : '#22c55e'};">
-                            \${stats.distToMega !== null ? stats.distToMega + ' HOPS' + (stats.nearestMegaId !== undefined ? ' (' + stats.nearestMegaId + ')' : '') : 'INF' }
-                        </span>
-                    </div>
-                    <div class="stat-row" style="border-bottom: none;">
-                        <span class="stat-label">FUEL_CAPACITY</span>
-                        <span class="stat-value" style="color: \${fCol};">\${stats.fuel}</span>
-                    </div>
-                    <div class="fuel-container">
-                        <div class="fuel-bar" style="width: \${fPct}%; background: \${fCol};"></div>
-                    </div>
-                    <div class="stat-row" style="margin-top: 15px;">
-                        <span class="stat-label">TOTAL_WEALTH</span>
-                        <span class="stat-value" style="color:#22c55e">\${stats.totalWealth || '0'}</span>
-                    </div>
-                    <div class="rank-grid">
-                        <div class="rank-item">
-                            <span class="rank-label">Rank_Wealth</span>
-                            <span class="rank-val">\${stats.rankWealth || 'N/A'}</span>
-                        </div>
-                        <div class="rank-item">
-                            <span class="rank-label">Rank_Trade</span>
-                            <span class="rank-val">\${stats.rankTrading || 'N/A'}</span>
-                        </div>
-                        <div class="rank-item">
-                            <span class="rank-label">Rank_Exp</span>
-                            <span class="rank-val">\${stats.rankExploration || 'N/A'}</span>
-                        </div>
-                    </div>
-                    <div class="timestamp">LAST_SYNC: \${lastSeen}</div>
-                \`;
-                grid.appendChild(card);
+                const renderRankItem = (label, current, previous) => {
+                    const curStyle = getRankStyle(current);
+                    const curVal = current && current !== 'N/A' ? parseInt(current.replace('#', '')) : null;
+                    const preVal = previous && previous !== 'N/A' ? parseInt(previous.replace('#', '')) : null;
+                    
+                    let aniClass = '';
+                    let stackHtml = '';
+
+                    if (preVal !== null && curVal !== null && preVal !== curVal) {
+                        if (curVal < preVal) { // Rank Improved
+                            aniClass = 'animate-down';
+                            stackHtml = '<div class="rank-val ' + curStyle.cls + '">' + curStyle.icon + current + '</div>' +
+                                        '<div class="rank-val ' + getRankStyle(previous).cls + '">' + getRankStyle(previous).icon + previous + '</div>';
+                        } else { // Rank Dropped
+                            aniClass = 'animate-up';
+                            stackHtml = '<div class="rank-val ' + getRankStyle(previous).cls + '">' + getRankStyle(previous).icon + previous + '</div>' +
+                                        '<div class="rank-val ' + curStyle.cls + '">' + curStyle.icon + current + '</div>';
+                        }
+                    } else {
+                        stackHtml = '<div class="rank-val ' + curStyle.cls + '">' + curStyle.icon + (current || 'N/A') + '</div>';
+                    }
+
+                    return '<div class="rank-item">' +
+                                '<span class="rank-label">' + label + '</span>' +
+                                '<div class="rank-val-container">' +
+                                    '<div class="rank-stack ' + aniClass + '">' +
+                                        stackHtml +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>';
+                };
+
+                card.innerHTML = '\
+                    <div class="char-name">\
+                        <span class="glitch-text" data-text="' + name + '">' + name + '</span>\
+                        <div class="gb-toggle-chip ' + (isPilotActive ? 'active' : '') + '">\
+                            <span class="chip-label">AP</span>\
+                            <span class="chip-state">' + (isPilotActive ? 'ON' : 'OFF') + '</span>\
+                        </div>\
+                    </div>\
+                    <div class="stat-row">\
+                        <span class="stat-label">CREDITS_BANK</span>\
+                        <span class="stat-value">' + stats.bank + '</span>\
+                    </div>\
+                    <div class="stat-row">\
+                        <span class="stat-label">CREDITS_HAND</span>\
+                        <span class="stat-value">' + stats.onHand + '</span>\
+                    </div>\
+                    <div class="stat-row">\
+                        <span class="stat-label">CURRENT_LOCATION</span>\
+                        <span class="stat-value">SECTOR ' + (stats.currentSector || '???') + '</span>\
+                    </div>\
+                    <div class="stat-row">\
+                        <span class="stat-label">MEGA_PORT_PROXIMITY</span>\
+                        <span class="stat-value" style="color: ' + (stats.distToMega !== null ? (stats.distToMega <= 5 ? '#22c55e' : (stats.distToMega <= 12 ? '#f59e0b' : '#ff4444')) : '#22c55e') + ';">\
+                            ' + (stats.distToMega !== null ? stats.distToMega + ' HOPS' + (stats.nearestMegaId !== undefined ? ' (' + stats.nearestMegaId + ')' : '') : 'INF') + '\
+                        </span>\
+                    </div>\
+                    <div class="stat-row" style="border-bottom: none;">\
+                        <span class="stat-label">FUEL_CAPACITY</span>\
+                        <span class="stat-value" style="color: ' + fCol + ';">' + stats.fuel + '</span>\
+                    </div>\
+                    <div class="fuel-container">\
+                        <div class="fuel-bar" style="width: ' + fPct + '%; background: ' + fCol + ';"></div>\
+                    </div>\
+                    <div class="stat-row" style="margin-top: 15px;">\
+                        <span class="stat-label">TOTAL_WEALTH</span>\
+                        <span class="stat-value" style="color:#22c55e">' + (stats.totalWealth || '0') + '</span>\
+                    </div>\
+                    <div class="rank-grid">\
+                        ' + renderRankItem('Rank_Wealth', stats.rankWealth, prevStats?.rankWealth) + '\
+                        ' + renderRankItem('Rank_Trade', stats.rankTrading, prevStats?.rankTrading) + '\
+                        ' + renderRankItem('Rank_Exp', stats.rankExploration, prevStats?.rankExploration) + '\
+                    </div>\
+                    <div class="timestamp">LAST_SYNC: ' + lastSeen + '</div>\
+                ';
             });
         }
 
@@ -536,8 +658,22 @@ function generateDashboardHTML() {
 
         document.getElementById('refresh-trigger').onclick = forceRefresh;
 
+        function triggerGlitch() {
+            document.body.classList.add('glitch-active');
+            setTimeout(() => {
+                document.body.classList.remove('glitch-active');
+                scheduleNextGlitch();
+            }, 100 + Math.random() * 200);
+        }
+
+        function scheduleNextGlitch() {
+            const delay = 3000 + Math.random() * 10000;
+            setTimeout(triggerGlitch, delay);
+        }
+
         fetchData();
         setInterval(updateTicker, 1000);
+        scheduleNextGlitch();
     </script>
 </body>
 </html>`;
