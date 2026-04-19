@@ -664,6 +664,10 @@ function generateDashboardHTML() {
                         <span class="stat-label">FUEL_CAPACITY</span>\
                         <span class="stat-value" style="color: ' + fCol + ';">' + stats.fuel + '</span>\
                     </div>\
+                    <div class="stat-row">\
+                        <span class="stat-label">FUEL_CONSUMPTION</span>\
+                        <span class="stat-value">' + (stats.fuelPerStep ? parseFloat(stats.fuelPerStep.toFixed(2)) : '--') + ' / HOP</span>\
+                    </div>\
                     <div class="fuel-container">\
                         <div class="fuel-bar" style="width: ' + fPct + '%; background: ' + fCol + '; border-radius: 2px; height: 100%;"></div>\
                         <div style="position: absolute; left: ' + (stats.fuelThreshold || 40) + '%; top: -2px; bottom: -2px; width: 1px; background: #ff4444; z-index: 10; box-shadow: 0 0 5px rgba(255, 68, 68, 0.4);"></div>\

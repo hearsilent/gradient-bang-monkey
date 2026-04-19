@@ -399,6 +399,7 @@
                     <div id="gb-stat-container">
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>CREDITS_BANK</span><span id="val-bank" class="gb-stat-value">0</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>CREDITS_HAND</span><span id="val-hand" class="gb-stat-value">0</span></div>
+                        <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>TOTAL_WEALTH</span><span id="val-tw" class="gb-stat-value">0</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>LOC_SECTOR</span><span id="val-sector" class="gb-stat-value">UNKNOWN</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>MEGA_PROXIMITY</span><span id="val-mega" class="gb-stat-value">INF</span></div>
                         <div class="gb-stat-row"><span class="gb-stat-label"><span class="gb-prefix gb-prefix-icon">::</span>FUEL_CAPACITY</span><span id="val-fuel" class="gb-stat-value">--/--</span></div>
@@ -825,7 +826,7 @@
             
             // Fuel Parsing
             if (fuel !== "N/A") {
-                const [cur, tot] = fuel.split('/').map(n => parseInt(n.replace(/,/g,'')));
+                const [cur, tot] = fuel.split('/').map(n => parseFloat(n.replace(/,/g,'')));
                 fuelCur = cur; fuelMax = tot;
                 if (!isNaN(cur) && !isNaN(tot)) fuelPct = (cur / tot) * 100;
             }
@@ -901,7 +902,8 @@
             window.lastKnownFuel = fuelCur;
 
             if (fcEl) {
-                fcEl.innerText = window.lastFuelPerStep ? `${window.lastFuelPerStep.toFixed(1)} / HOP` : '-- / HOP';
+                const displayVal = window.lastFuelPerStep ? parseFloat(window.lastFuelPerStep.toFixed(2)) : '--';
+                fcEl.innerText = `${displayVal} / HOP`;
             }
 
             // Warning Logic
@@ -909,7 +911,7 @@
                 const needed = window.lastKnownDistToMega * window.lastFuelPerStep;
                 const minSafePct = ((needed / (fuelMax || 1)) * 100) + 5;
                 if (CONFIG.fuelThreshold < minSafePct) {
-                    warnEl.innerHTML = `⚠️ THRESHOLD TOO LOW<br>Need ~${needed.toFixed(0)} fuel to reach Mega (${minSafePct.toFixed(0)}%).<br>Suggested: ${Math.ceil(minSafePct)}%`;
+                    warnEl.innerHTML = `⚠️ THRESHOLD TOO LOW<br>Need ~${needed.toFixed(1)} fuel to reach Mega (${minSafePct.toFixed(1)}%).<br>Suggested: ${Math.ceil(minSafePct)}%`;
                     warnEl.classList.add('active');
                 } else {
                     warnEl.classList.remove('active');
@@ -1049,11 +1051,12 @@
             const stats = refreshLiveData();
             if (!stats) return;
             let history = JSON.parse(localStorage.getItem('gb_history') || '[]');
-            const ranks = window.lastRanks || { w: "N/A", t: "N/A", e: "N/A" };
+            const ranks = window.lastRanks || { w: "N/A", t: "N/A", e: "N/A", tw: "0" };
             history.push({ 
                 t: new Date().toLocaleString(), 
                 b: stats.bank, 
                 h: stats.onHand, 
+                tw: ranks.tw,
                 f: stats.fuel,
                 s: stats.currentSector,
                 nm: window.lastNearestMegaId,
@@ -1112,7 +1115,7 @@
                 let col = '#ff4444';
                 const fEl = document.getElementById('val-fuel');
                 let fMax = 0;
-                if (fEl && fEl.innerText.includes('/')) fMax = parseInt(fEl.innerText.split('/')[1].replace(/,/g,''));
+                if (fEl && fEl.innerText.includes('/')) fMax = parseFloat(fEl.innerText.split('/')[1].replace(/,/g,''));
 
                 if (window.lastFuelPerStep && fMax) {
                     const neededPct = (minDist * window.lastFuelPerStep / fMax) * 100;
@@ -1143,7 +1146,7 @@
             const mEl = document.getElementById('val-mega'); 
             const fuelEl = document.getElementById('val-fuel');
             let fuelMax = 0;
-            if (fuelEl && fuelEl.innerText.includes('/')) fuelMax = parseInt(fuelEl.innerText.split('/')[1].replace(/,/g,''));
+            if (fuelEl && fuelEl.innerText.includes('/')) fuelMax = parseFloat(fuelEl.innerText.split('/')[1].replace(/,/g,''));
 
             if (mEl) {
                 const idSuffix = window.lastNearestMegaId !== undefined ? ` (${window.lastNearestMegaId})` : '';
@@ -1180,7 +1183,7 @@
                     rankExploration = findR(lbData.exploration, 'sectors_visited');
                     const myWealth = lbData.wealth?.find(p => p.player_name?.trim().toUpperCase() === CONFIG.charName.trim().toUpperCase());
                     if (myWealth) totalWealth = myWealth.total_wealth.toLocaleString();
-                    window.lastRanks = { w: rankWealth, t: rankTrading, e: rankExploration };
+                    window.lastRanks = { w: rankWealth, t: rankTrading, e: rankExploration, tw: totalWealth };
                 }
             } catch (lbErr) { log('Leaderboard fetch failed: ' + lbErr.message); }
 
@@ -1188,6 +1191,8 @@
             if (rEl) {
                 rEl.innerHTML = `${getRankDisplay(rankWealth)} / ${getRankDisplay(rankTrading)} / ${getRankDisplay(rankExploration)}`;
             }
+            const twEl = document.getElementById('val-tw');
+            if (twEl) twEl.innerText = totalWealth;
 
             const payload = {
                 charName: CONFIG.charName,
@@ -1201,6 +1206,7 @@
                 rankWealth,
                 rankTrading,
                 rankExploration,
+                totalWealth,
                 fuelThreshold: CONFIG.fuelThreshold || 40,
                 fuelPerStep: window.lastFuelPerStep || 0,
                 apUptime: window.currentApUptime || 0,
