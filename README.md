@@ -2,6 +2,9 @@
 
 A professional-grade automation and telemetry suite for Gradient Bang. This project features a tactical userscript for autonomous gameplay and a Cloudflare Worker for remote monitoring.
 
+> [!TIP]
+> It is recommended to use the `stable` branch for the most stable experience.
+
 ## Screenshots
 <img height="500" alt="image" src="https://github.com/user-attachments/assets/9347f46a-99c8-40f1-8952-bc7781e8b344" />
 <img height="500" alt="image" src="https://github.com/user-attachments/assets/5f218210-51c1-4ba2-8ec8-fcce16f02e29" />
